@@ -191,7 +191,12 @@ def gh_search(query: str, per_page: int = 100, pages: int = 1) -> list[dict]:
         try:
             data = json.loads(http_get(url, gh_headers()))
         except urllib.error.HTTPError as e:
-            print(f"  ! GitHub API {e.code}(可能超過速率限制,建議設定 GITHUB_TOKEN)", file=sys.stderr)
+            try:
+                msg = json.loads(e.read()).get("message", "")
+            except Exception:
+                msg = ""
+            hint = "超過速率限制,建議設定 GITHUB_TOKEN" if "rate limit" in msg.lower() else msg
+            print(f"  ! GitHub API {e.code}:{hint or '請求被拒'}", file=sys.stderr)
             break
         repos.extend(data.get("items", []))
         if len(data.get("items", [])) < per_page:
@@ -234,6 +239,9 @@ def accelerating_repos(top: int, now: datetime) -> tuple[list[dict], str | None]
     for q in (f"pushed:>={since} stars:>=1000", f"pushed:>={since} stars:300..5000"):
         for r in gh_search(q, pages=2):
             seen.setdefault(r["full_name"], slim(r))
+
+    if not seen:
+        return [], "GitHub API 沒有回傳資料(可能被限速),本次不更新快照。"
 
     snaps = {}
     if SNAPSHOT_FILE.exists():
