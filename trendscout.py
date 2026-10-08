@@ -78,6 +78,18 @@ CATEGORIES: dict[str, list[str]] = {
               "台風", "天気", "태풍", "날씨"],
 }
 
+# 補充多語系詞彙(日、韓、葡、德等)
+for _cat, _words in {
+    '遊戲/動漫': ['gta', 'video game', 'コスプレ', '声優', '漫畫', '電玩', 'jogo', 'spiel'],
+    '音樂/明星/影視': ['celebrity', 'prince', 'princess', 'royal', 'nobel', 'poet', 'novel', 'festival', 'documentary', 'show', 'tv', 'episode', 'novela', 'ator', 'atriz', 'schauspieler', 'schauspielerin', 'prinzessin', 'prinz', '写真集', 'グラドル', 'タレント', 'アイドル', 'フェス', '芸能', '女優', '俳優', '歌手', '藝人', '綜藝', '偶像', '노벨', '배우', '아이돌', '예능', '문학'],
+    '體育': ['marathon', 'nhl', 'hockey', 'eishockey', 'golf', 'boxing', 'ufc', 'wta', 'atp', 'cricket', 'futebol', 'jogador', 'campeonato', 'fußball', 'bundesliga', '球団', '甲子園', 'npb', '巨人', '阪神', 'バスケ', '選手', '盃', '杯', '亞洲盃', '賽', '球', '경기', '선수'],
+    '科技/AI': ['mac', 'chatbot', 'software', 'computer', 'computing', 'doodle', 'laptop', 'gpu', '半導體', '晶片', '輝達', '台積電', '반도체'],
+    '財經/投資': ['dividend', 'deals', 'sale', 'shipping', '海運', '上市', '首次公開發行', '配当', '배당', 'ações', 'bolsa', 'aktie', 'börse', 'arbeitslosigkeit', 'erträge', 'wirtschaft', 'economia'],
+    '政治/社會': ['crime', 'police', 'shooting', 'trump', 'harris', 'deputado', 'eleito', 'eleitoral', 'senado', 'polizei', 'verbrechen', 'wahl', 'regierung', 'bundestag', '國防', '立委', '民兵', '犯罪', '警察', '범죄', '국방부', '내란', '구치소', '보훈', '정부', '警察', '事件', '逮捕'],
+    '健康/生活': ['cancer', 'depression', 'chuva', 'tempestade', 'temporal', 'feriado', 'krebs', 'ehe', 'scheidung', 'wetter', 'unwetter', '傷口', '醫院', '病院', '介護', '季風', '雨', '門票', '병원', '입원', '화재', '날씨', '火災', 'fire'],
+}.items():
+    CATEGORIES[_cat] += _words
+
 # 主題 → 推估主要搜尋年齡層(規則型推估,可依需求自行調整)
 AGE_GROUPS: dict[str, list[str]] = {
     "13-24 歲": ["遊戲/動漫", "音樂/明星/影視"],
@@ -119,10 +131,13 @@ def parse_traffic(s: str) -> int:
     return int(n * mult)
 
 
+def _is_latin(w: str) -> bool:
+    return all(ord(c) < 0x2E80 for c in w)
+
+
 def _matcher(words: list[str]) -> re.Pattern:
     # 英文字詞要完整比對(避免 "vs" 命中 "news"),中日韓字詞直接子字串比對
-    alts = [rf"(?<![a-z0-9]){re.escape(w)}(?![a-z0-9])" if w.isascii() else re.escape(w)
-            for w in words]
+    alts = [rf"(?<!\w){re.escape(w)}(?!\w)" if _is_latin(w) else re.escape(w) for w in words]
     return re.compile("|".join(alts))
 
 
@@ -241,7 +256,7 @@ def accelerating_repos(top: int, now: datetime) -> tuple[list[dict], str | None]
             seen.setdefault(r["full_name"], slim(r))
 
     if not seen:
-        return [], "GitHub API 沒有回傳資料(可能被限速),本次不更新快照。"
+        return [], "GitHub API 沒有回傳資料(被拒或被限速),本次不更新快照。"
 
     snaps = {}
     if SNAPSHOT_FILE.exists():
@@ -379,16 +394,23 @@ def render_html(report: dict) -> str:
 
     return f"""<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>TrendScout 報表</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap">
 <style>
-:root{{--bg:#fafaf9;--fg:#1c1917;--mut:#78716c;--card:#fff;--line:#e7e5e4;--acc:#2563eb}}
-@media (prefers-color-scheme:dark){{:root{{--bg:#1c1917;--fg:#f5f5f4;--mut:#a8a29e;--card:#292524;--line:#44403c;--acc:#60a5fa}}}}
-body{{background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,"Noto Sans TC",sans-serif;margin:0;padding:24px 16px;max-width:1200px;margin:auto}}
-h1{{margin:0}} h2{{margin-top:36px;border-bottom:2px solid var(--line);padding-bottom:4px}}
-.grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}}
-section{{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;overflow:auto}}
-table{{border-collapse:collapse;width:100%}} td,th{{padding:5px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}}
-table.wide{{background:var(--card);border:1px solid var(--line);border-radius:10px;display:block;overflow-x:auto}}
-.sub,.note{{color:var(--mut);font-size:12px}} a{{color:var(--acc);text-decoration:none}}
+/* 版面:單一欄位的報表,卡片格線在手機上自動變成一欄 */
+:root{{--bg:#f6f7f9;--fg:#18202b;--mut:#5d6878;--card:#ffffff;--line:#dde2ea;--acc:#1d5fd1;--chip:#e8eefb}}
+@media (prefers-color-scheme:dark){{:root:not([data-theme="light"]){{--bg:#12161d;--fg:#e8ecf2;--mut:#98a3b3;--card:#1b212b;--line:#2c3542;--acc:#7aa7ff;--chip:#22304a;color-scheme:dark}}}}
+:root[data-theme="dark"]{{--bg:#12161d;--fg:#e8ecf2;--mut:#98a3b3;--card:#1b212b;--line:#2c3542;--acc:#7aa7ff;--chip:#22304a;color-scheme:dark}}
+body{{background:var(--bg);color:var(--fg);font:15px/1.55 "Noto Sans TC",system-ui,sans-serif;margin:0 auto;padding-inline:16px;padding-block:20px 40px;max-width:1200px}}
+h1{{margin:0;font-size:1.6rem;text-wrap:balance}} h2{{margin:32px 0 12px;font-size:1.2rem;border-bottom:2px solid var(--line);padding-bottom:4px;text-wrap:balance}}
+h3{{margin:0 0 8px;font-size:1.05rem}}
+.grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:14px}}
+section{{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;min-width:0;overflow-x:auto}}
+table{{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}}
+td,th{{padding:6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}}
+th{{color:var(--mut);font-weight:500;font-size:12px;letter-spacing:.04em}}
+table.wide{{background:var(--card);border:1px solid var(--line);border-radius:8px;display:block;overflow-x:auto}}
+.sub,.note{{color:var(--mut);font-size:12.5px}} a{{color:var(--acc);text-decoration:none}} a:focus-visible{{outline:2px solid var(--acc)}}
+ul{{padding-left:1.1em;margin:6px 0}}
 </style></head><body>
 <h1>TrendScout 報表</h1><div class="sub">產生時間:{e(report['generated_at'])}</div>
 {''.join(parts)}
