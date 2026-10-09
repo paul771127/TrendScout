@@ -34,7 +34,7 @@ export GITHUB_TOKEN=ghp_xxx                 # 選用:提高 GitHub API 速率上
 ## 每天自動更新的網頁(GitHub Pages)
 
 `.github/workflows/report.yml` 每天台灣時間 08:17 自動執行一次,把報表發佈到
-https://paul771127.github.io/trendscout/ 。手機、電腦打開都是最新版,GitHub 排行也會有資料。
+https://paul771127.github.io/TrendScout/ 。手機、電腦打開都是最新版,GitHub 排行也會有資料。
 
 第一次使用要開啟 Pages:repo 的 **Settings → Pages → Build and deployment → Source** 選 **GitHub Actions**。
 之後可以到 **Actions → 每日報表 → Run workflow** 手動跑一次,不用等到隔天。
