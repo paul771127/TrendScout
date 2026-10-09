@@ -23,7 +23,6 @@
 from __future__ import annotations
 
 import argparse
-import html
 import json
 import os
 import re
@@ -49,52 +48,176 @@ COUNTRIES = {
     "MY": "馬來西亞", "AU": "澳洲", "CA": "加拿大", "MX": "墨西哥", "ES": "西班牙",
     "IT": "義大利",
 }
-DEFAULT_GEOS = ["TW", "JP", "KR", "US", "GB", "IN", "BR", "DE"]
+DEFAULT_GEOS = list(COUNTRIES)
 
-# 主題分類規則:比對「關鍵字 + 相關新聞標題」(不分大小寫)
+# 主題分類規則:比對「關鍵字 + 相關新聞標題」(不分大小寫)。
+# 英文等拉丁字母詞要完整比對,中日韓字詞用子字串比對。可自行增減。
 CATEGORIES: dict[str, list[str]] = {
-    "遊戲/動漫": ["video game", "gaming", "nintendo", "switch", "playstation", "ps5", "xbox", "steam",
-                "anime", "manga", "pokemon", "genshin", "esports", "roblox", "minecraft",
-                "fortnite", "valorant", "league of legends", "ゲーム", "アニメ", "遊戲", "動漫",
-                "게임", "애니"],
-    "音樂/明星/影視": ["concert", "album", "song", "singer", "kpop", "k-pop", "idol", "movie",
-                   "film", "netflix", "series", "drama", "actor", "actress", "tour", "trailer",
-                   "box office", "spotify", "bts", "blackpink", "taylor swift", "演唱會", "電影",
-                   "劇", "歌手", "映画", "ドラマ", "드라마", "영화", "가수"],
-    "體育": ["vs", "match", "league", "world cup", "nba", "nfl", "mlb", "fifa", "uefa", "premier league",
-           "football", "soccer", "basketball", "baseball", "tennis", "f1", "grand prix",
-           "olympic", "goal", "score", "棒球", "足球", "籃球", "野球", "サッカー", "야구", "축구"],
-    "科技/AI": ["iphone", "apple", "android", "samsung", "google", "openai", "chatgpt",
-              "ai", "claude", "nvidia", "microsoft", "tesla", "update", "ios", "chip", "app",
-              "smartphone", "科技", "手機"],
-    "財經/投資": ["stock", "stocks", "market", "nasdaq", "dow", "s&p", "bitcoin", "crypto",
-              "fed", "rate", "inflation", "earnings", "ipo", "price", "economy", "股", "匯率",
-              "株", "주식", "jobs report"],
-    "政治/社會": ["election", "president", "minister", "government", "parliament", "congress",
-              "senate", "court", "law", "policy", "protest", "war", "選舉", "總統", "政府",
-              "選挙", "大統領", "선거", "대통령"],
-    "健康/生活": ["health", "covid", "virus", "flu", "vaccine", "hospital", "weather", "typhoon",
-              "earthquake", "storm", "hurricane", "recipe", "holiday", "颱風", "地震", "天氣",
-              "台風", "天気", "태풍", "날씨"],
+    "AI 人工智慧": ["ai", "a.i.", "chatgpt", "openai", "claude", "anthropic", "gemini", "copilot", "llm",
+                  "chatbot", "deepseek", "grok", "人工智慧", "生成式", "人工知能", "生成ai", "인공지능",
+                  "챗gpt", "inteligência artificial", "künstliche intelligenz", "ki"],
+    "手機/3C": ["iphone", "ipad", "apple watch", "airpods", "samsung", "galaxy", "pixel", "android", "ios",
+               "macbook", "mac", "laptop", "smartphone", "xiaomi", "huawei", "手機", "平板", "筆電",
+               "スマホ", "아이폰", "갤럭시", "celular", "handy"],
+    "科技/網路": ["apple", "google", "microsoft", "meta", "nvidia", "tesla", "spacex", "starlink", "software",
+                "app", "update", "outage", "internet", "chip", "gpu", "semiconductor", "computing", "computer",
+                "youtube", "tiktok", "instagram", "whatsapp", "facebook", "doodle", "半導體", "晶片", "輝達",
+                "台積電", "半導体", "반도체", "科技"],
+    "電玩/電競": ["video game", "gaming", "nintendo", "switch 2", "playstation", "ps5", "xbox", "steam",
+                "esports", "roblox", "minecraft", "fortnite", "valorant", "league of legends", "gta",
+                "pokemon", "pokémon", "genshin", "ゲーム", "遊戲", "電玩", "電競", "게임", "videogame"],
+    "動漫": ["anime", "manga", "アニメ", "漫画", "動漫", "漫畫", "声優", "コスプレ", "애니", "웹툰", "鬼滅",
+           "one piece", "ジャンプ"],
+    "音樂": ["concert", "album", "song", "singer", "kpop", "k-pop", "tour", "spotify", "grammy", "festival",
+           "bts", "blackpink", "taylor swift", "演唱會", "歌手", "專輯", "新歌", "ライブ", "フェス", "가수",
+           "콘서트", "앨범", "música", "cantor", "cantora", "show", "konzert", "sänger", "sängerin"],
+    "影視/綜藝": ["movie", "film", "netflix", "series", "drama", "trailer", "box office", "episode", "season",
+                "tv", "documentary", "disney", "hbo", "oscar", "emmy", "電影", "影集", "劇", "綜藝", "映画",
+                "ドラマ", "番組", "드라마", "영화", "예능", "novela", "filme", "série", "serie", "tatort"],
+    "明星/名人": ["celebrity", "actor", "actress", "idol", "prince", "princess", "royal", "kardashian",
+                "wedding", "divorce", "dating", "藝人", "偶像", "女星", "男星", "女優", "俳優", "芸能",
+                "タレント", "アイドル", "写真集", "グラドル", "배우", "아이돌", "열애", "ator", "atriz",
+                "schauspieler", "schauspielerin", "prinz", "prinzessin", "scheidung", "結婚", "離婚", "熱愛"],
+    "足球": ["football", "soccer", "fifa", "uefa", "premier league", "champions league", "la liga",
+           "world cup", "futebol", "fußball", "bundesliga", "serie a", "brasileirão", "libertadores",
+           "足球", "國足", "サッカー", "축구", "dfb"],
+    "籃球": ["nba", "wnba", "basketball", "籃球", "バスケ", "bリーグ", "농구"],
+    "棒球": ["mlb", "baseball", "npb", "kbo", "world series", "dodgers", "yankees", "棒球", "中職", "野球",
+           "甲子園", "球団", "巨人", "阪神", "大谷", "야구"],
+    "其他運動": ["tennis", "f1", "formula 1", "grand prix", "golf", "boxing", "ufc", "nfl", "nhl", "hockey",
+             "eishockey", "cricket", "marathon", "olympic", "olympics", "wta", "atp", "rugby", "volleyball",
+             "網球", "排球", "羽球", "亞運", "奧運", "アジア大会", "五輪", "テニス", "테니스", "배구", "마라톤"],
+    "股市/投資": ["stock", "stocks", "nasdaq", "dow", "s&p", "earnings", "ipo", "dividend", "etf", "股市",
+              "股價", "台股", "美股", "上市", "首次公開發行", "株価", "日経", "配当", "주식", "코스피",
+              "배당", "ações", "bolsa", "ibovespa", "aktie", "börse", "dax"],
+    "加密貨幣": ["bitcoin", "btc", "ethereum", "crypto", "cryptocurrency", "solana", "dogecoin",
+             "比特幣", "加密貨幣", "虛擬貨幣", "ビットコイン", "暗号資産", "비트코인", "코인"],
+    "經濟/就業": ["economy", "inflation", "fed", "interest rate", "rate cut", "jobs report", "unemployment",
+              "gdp", "tariff", "tariffs", "recession", "經濟", "通膨", "利率", "關稅", "匯率", "景気",
+              "円安", "金利", "경제", "금리", "환율", "economia", "inflação", "wirtschaft",
+              "arbeitslosigkeit", "zinsen", "erträge"],
+    "商業/購物": ["deals", "sale", "black friday", "amazon", "costco", "walmart", "shopping", "好市多",
+              "好 市 多", "百貨", "三越", "優惠", "折扣", "セール", "할인", "하이마트", "promoção",
+              "angebot", "海運", "長榮", "shipping"],
+    "政治/選舉": ["election", "president", "minister", "government", "parliament", "congress", "senate",
+              "trump", "harris", "biden", "vote", "poll", "pentagon", "選舉", "總統", "政府", "立委",
+              "立法院", "國防", "選挙", "首相", "大統領", "国会", "선거", "대통령", "국회", "정부",
+              "국방부", "보훈", "eleição", "eleito", "eleitoral", "deputado", "senado", "candidatos",
+              "wahl", "regierung", "bundestag", "kanzler", "protests", "protest"],
+    "國際/戰爭": ["war", "ukraine", "russia", "israel", "gaza", "iran", "missile", "nato", "embassy",
+              "戰爭", "烏克蘭", "以色列", "飛彈", "共軍", "民兵", "戦争", "北朝鮮", "전쟁", "북한",
+              "guerra", "krieg", "embaixadas"],
+    "社會/案件": ["crime", "police", "shooting", "murder", "arrest", "court", "trial", "lawsuit", "accident",
+              "crash", "fire", "犯罪", "警察", "逮捕", "事件", "法院", "車禍", "火災", "殺人", "事故",
+              "범죄", "화재", "사고", "경찰", "내란", "구치소", "polícia", "polizei", "verbrechen",
+              "schüsse", "unfall"],
+    "天氣/災害": ["weather", "storm", "hurricane", "typhoon", "tornado", "earthquake", "flood", "snow",
+              "heatwave", "颱風", "地震", "天氣", "豪雨", "季風", "雨", "寒流", "台風", "天気", "大雨",
+              "熱帯低気圧", "태풍", "날씨", "지진", "chuva", "tempestade", "temporal", "previsão do tempo",
+              "wetter", "unwetter", "sturm"],
+    "健康/醫療": ["health", "covid", "virus", "flu", "vaccine", "hospital", "cancer", "depression",
+              "disease", "outbreak", "strain", "疫苗", "醫院", "流感", "癌", "健康", "傷口", "病院",
+              "介護", "병원", "입원", "건강", "saúde", "krebs", "gesundheit"],
+    "生活/節日": ["holiday", "recipe", "food", "coffee", "restaurant", "travel", "flight", "airline",
+              "daylight saving", "sommerzeit", "lottery", "powerball", "halloween", "thanksgiving",
+              "christmas", "oktoberfest", "unity day", "咖啡", "美食", "旅遊", "連假", "門票", "祝日",
+              "연휴", "feriado", "natal"],
+    "教育/文化": ["nobel", "literature", "poet", "book", "novel", "exam", "university", "school", "museum",
+              "palace", "諾貝爾", "文學", "考試", "大學", "學測", "ノーベル", "試験", "노벨", "문학",
+              "수능", "대학", "경복궁", "literatura", "literatur", "prêmio"],
 }
-
-# 補充多語系詞彙(日、韓、葡、德等)
+# 中文詞庫:分類時也會比對關鍵字的中文翻譯,讓各種語言都能套用同一套規則
 for _cat, _words in {
-    '遊戲/動漫': ['gta', 'video game', 'コスプレ', '声優', '漫畫', '電玩', 'jogo', 'spiel'],
-    '音樂/明星/影視': ['celebrity', 'prince', 'princess', 'royal', 'nobel', 'poet', 'novel', 'festival', 'documentary', 'show', 'tv', 'episode', 'novela', 'ator', 'atriz', 'schauspieler', 'schauspielerin', 'prinzessin', 'prinz', '写真集', 'グラドル', 'タレント', 'アイドル', 'フェス', '芸能', '女優', '俳優', '歌手', '藝人', '綜藝', '偶像', '노벨', '배우', '아이돌', '예능', '문학'],
-    '體育': ['marathon', 'nhl', 'hockey', 'eishockey', 'golf', 'boxing', 'ufc', 'wta', 'atp', 'cricket', 'futebol', 'jogador', 'campeonato', 'fußball', 'bundesliga', '球団', '甲子園', 'npb', '巨人', '阪神', 'バスケ', '選手', '盃', '杯', '亞洲盃', '賽', '球', '경기', '선수'],
-    '科技/AI': ['mac', 'chatbot', 'software', 'computer', 'computing', 'doodle', 'laptop', 'gpu', '半導體', '晶片', '輝達', '台積電', '반도체'],
-    '財經/投資': ['dividend', 'deals', 'sale', 'shipping', '海運', '上市', '首次公開發行', '配当', '배당', 'ações', 'bolsa', 'aktie', 'börse', 'arbeitslosigkeit', 'erträge', 'wirtschaft', 'economia'],
-    '政治/社會': ['crime', 'police', 'shooting', 'trump', 'harris', 'deputado', 'eleito', 'eleitoral', 'senado', 'polizei', 'verbrechen', 'wahl', 'regierung', 'bundestag', '國防', '立委', '民兵', '犯罪', '警察', '범죄', '국방부', '내란', '구치소', '보훈', '정부', '警察', '事件', '逮捕'],
-    '健康/生活': ['cancer', 'depression', 'chuva', 'tempestade', 'temporal', 'feriado', 'krebs', 'ehe', 'scheidung', 'wetter', 'unwetter', '傷口', '醫院', '病院', '介護', '季風', '雨', '門票', '병원', '입원', '화재', '날씨', '火災', 'fire'],
+    'AI 人工智慧': ['人工智慧', '聊天機器人'],
+    '手機/3C': ['手機', '三星', '筆電', '平板', '耳機'],
+    '科技/網路': ['網路', '軟體', '應用程式', '當機', '谷歌', '微軟', '特斯拉', '晶片'],
+    '電玩/電競': ['遊戲', '電玩', '電競', '玩家', '任天堂'],
+    '動漫': ['動畫', '漫畫', '動漫', '聲優'],
+    '音樂': ['演唱會', '歌手', '專輯', '歌曲', '樂團', '音樂', '巡演', '音樂節', '饒舌'],
+    '影視/綜藝': ['電影', '影集', '電視劇', '劇集', '節目', '預告', '票房', '首映', '紀錄片', '主演', '演員', '影評'],
+    '明星/名人': ['明星', '藝人', '女演員', '男演員', '偶像', '王子', '公主', '王室', '戀情', '網紅', '名人'],
+    '足球': ['足球', '英超', '西甲', '德甲', '意甲', '法甲', '歐冠', '世界盃', '世足', '足協', '國家隊'],
+    '籃球': ['籃球'],
+    '棒球': ['棒球', '大聯盟', '職棒', '投手', '打者', '全壘打'],
+    '其他運動': ['網球', '高爾夫', '拳擊', '賽車', '冰球', '冰上曲棍球', '板球', '馬拉松', '橄欖球', '排球', '羽球', '奧運', '亞運', '美式足球', '一級方程式', '摔角', '自行車', '游泳'],
+    '股市/投資': ['股市', '股票', '股價', '股息', '指數', '證券', '投資', '漲停', '大漲', '大跌', '收盤', '上市'],
+    '加密貨幣': ['比特幣', '加密貨幣', '以太坊', '虛擬貨幣'],
+    '經濟/就業': ['經濟', '通膨', '通貨膨脹', '利率', '降息', '升息', '關稅', '失業', '就業', '薪資', '匯率', '景氣', '央行'],
+    '商業/購物': ['購物', '優惠', '折扣', '特賣', '促銷', '百貨', '超市', '門市', '開幕', '電商'],
+    '政治/選舉': ['選舉', '總統', '政府', '部長', '國會', '議員', '參議院', '眾議院', '總理', '首相', '投票', '民調', '候選人', '政黨', '抗議', '示威', '內閣'],
+    '國際/戰爭': ['戰爭', '軍隊', '軍方', '飛彈', '空襲', '停火', '大使館', '制裁', '北約', '烏克蘭', '俄羅斯', '以色列', '加薩', '伊朗'],
+    '社會/案件': ['犯罪', '警方', '警察', '逮捕', '槍擊', '謀殺', '法院', '判決', '起訴', '審判', '車禍', '事故', '火災', '遇害', '嫌犯', '死亡'],
+    '天氣/災害': ['天氣', '颱風', '地震', '暴雨', '豪雨', '大雨', '下雨', '降雨', '風暴', '颶風', '龍捲風', '洪水', '氣溫', '寒流', '熱浪', '降雪', '氣象', '天氣預報'],
+    '健康/醫療': ['健康', '醫院', '醫生', '疾病', '病毒', '疫苗', '癌症', '流感', '新冠', '憂鬱', '醫療', '藥物'],
+    '生活/節日': ['節日', '假期', '連假', '美食', '餐廳', '咖啡', '食譜', '旅遊', '航班', '航空', '夏令時間', '彩券', '樂透', '萬聖節', '聖誕節', '慶典', '紀念日', '國慶'],
+    '教育/文化': ['諾貝爾', '文學', '詩人', '小說', '考試', '大學', '學校', '學生', '教育', '博物館', '歷史', '文化'],
 }.items():
     CATEGORIES[_cat] += _words
 
+for _cat, _words in {
+    "科技/網路": ["伺服器", "server"],
+    "影視/綜藝": ["哥斯拉", "廣播", "radio"],
+    "足球": ["fc", "cf", "sk", "arsenal", "real madrid", "barcelona", "boca juniors", "兵工廠"],
+    "股市/投資": ["mdax", "nikkei", "kospi"],
+    "生活/節日": ["祈禱", "禮拜", "齋戒", "sholat", "jadwal"],
+    "教育/文化": ["太空", "天文", "月亮", "土星", "nasa", "世代"],
+}.items():
+    CATEGORIES[_cat] += _words
+
+# 只說明「有比賽」但看不出項目的詞:沒命中其他運動分類時,歸到「其他運動」
+SPORTS_FALLBACK = ["vs", "x", "match", "選手", "比賽", "경기", "선수", "盃", "杯", "賽", "game", "spiel",
+                   "對陣", "球隊", "聯賽", "決賽", "擊敗", "戰勝", "賽事", "冠軍"]
+SPORTS = {"足球", "籃球", "棒球", "其他運動"}
+
 # 主題 → 推估主要搜尋年齡層(規則型推估,可依需求自行調整)
 AGE_GROUPS: dict[str, list[str]] = {
-    "13-24 歲": ["遊戲/動漫", "音樂/明星/影視"],
-    "25-44 歲": ["科技/AI", "財經/投資", "體育"],
-    "45 歲以上": ["政治/社會", "健康/生活", "財經/投資"],
+    "13-24 歲": ["電玩/電競", "動漫", "音樂", "影視/綜藝", "明星/名人"],
+    "25-44 歲": ["AI 人工智慧", "手機/3C", "科技/網路", "股市/投資", "加密貨幣", "足球", "籃球", "棒球",
+                "其他運動", "商業/購物", "生活/節日"],
+    "45 歲以上": ["政治/選舉", "國際/戰爭", "社會/案件", "天氣/災害", "健康/醫療", "經濟/就業", "教育/文化"],
+}
+
+# GitHub 專案分類:比對「專案名稱 + 說明 + topics 標籤」
+GH_CATEGORIES: dict[str, list[str]] = {
+    "AI Agent": ["agent", "agents", "agentic", "mcp", "mcp-server", "model context protocol", "multi-agent",
+                 "autonomous", "computer-use", "browser-use", "智能体"],
+    "LLM/聊天": ["llm", "llms", "gpt", "chatgpt", "openai", "claude", "claude-code", "anthropic", "gemini",
+               "llama", "ollama", "deepseek", "qwen", "rag", "chatbot", "prompt", "prompts", "langchain",
+               "大模型", "大语言模型"],
+    "機器學習": ["machine-learning", "machine learning", "deep-learning", "deep learning", "pytorch",
+             "tensorflow", "jax", "transformer", "transformers", "neural", "training", "fine-tuning",
+             "finetuning", "inference", "cuda", "reinforcement-learning", "dataset", "benchmark"],
+    "影像/影音": ["stable-diffusion", "diffusion", "comfyui", "image-generation", "text-to-image",
+              "video-generation", "tts", "text-to-speech", "speech", "whisper", "voice", "audio", "music",
+              "ocr", "computer-vision", "yolo", "image", "video", "3d", "gaussian-splatting", "camera"],
+    "網頁前端": ["react", "vue", "svelte", "nextjs", "next.js", "angular", "frontend", "css", "tailwind",
+             "tailwindcss", "ui", "component", "components", "design-system", "website", "web"],
+    "後端/資料庫": ["backend", "api", "rest", "graphql", "database", "sql", "postgres", "postgresql", "mysql",
+               "sqlite", "redis", "orm", "microservice", "microservices"],
+    "開發工具": ["cli", "terminal", "devtools", "developer-tools", "ide", "vscode", "neovim", "vim", "editor",
+             "git", "lint", "linter", "formatter", "compiler", "testing", "debugger", "sdk", "plugin",
+             "extension", "code-review", "coding", "grep"],
+    "DevOps/雲端": ["docker", "kubernetes", "k8s", "devops", "cloud", "aws", "gcp", "azure", "serverless",
+                  "terraform", "deploy", "deployment", "self-hosted", "selfhosted", "homelab", "monitoring",
+                  "observability"],
+    "資安/隱私": ["security", "pentest", "penetration-testing", "vulnerability", "exploit", "ctf", "malware",
+              "osint", "privacy", "encryption", "red-team", "hacking", "cybersecurity"],
+    "行動 App": ["ios", "android", "swiftui", "kotlin", "flutter", "react-native", "mobile", "iphone"],
+    "桌面/系統": ["macos", "windows", "linux", "desktop", "electron", "tauri", "menubar", "shell", "kernel",
+              "operating-system", "productivity", "automation", "dotfiles"],
+    "遊戲開發": ["game", "games", "gamedev", "game-engine", "unity", "godot", "unreal", "minecraft", "emulator",
+             "mod", "modding", "roblox"],
+    "資料/爬蟲": ["scraper", "scraping", "crawler", "crawl", "spider", "data", "analytics", "dashboard", "etl",
+              "visualization", "pandas", "spreadsheet", "firecrawl"],
+    "學習資源": ["awesome", "awesome-list", "tutorial", "tutorials", "course", "learning", "interview",
+             "roadmap", "book", "books", "guide", "cheatsheet", "education", "resources", "教程", "学习",
+             "面试"],
+    "硬體/IoT": ["embedded", "iot", "arduino", "esp32", "raspberry-pi", "hardware", "robot", "robotics",
+               "firmware", "drone"],
+    "區塊鏈/Web3": ["blockchain", "web3", "crypto", "ethereum", "solana", "bitcoin", "defi", "nft",
+                  "smart-contract"],
+    "金融/量化": ["trading", "quant", "stock", "stocks", "finance", "fintech", "backtest", "backtesting",
+              "investment"],
 }
 
 
@@ -154,13 +277,24 @@ def translate_all(texts: set[str]) -> dict[str, str]:
         except Exception:
             return t, None
 
-    failed = 0
+    failed: list[str] = []
     with ThreadPoolExecutor(max_workers=4) as pool:
         for t, zh in pool.map(work, todo):
             if zh:
                 cache[t] = zh
             else:
-                failed += 1
+                failed.append(t)
+    if failed:  # 多半是請求太密集被拒,放慢速度再試一次
+        time.sleep(3)
+        retry, failed = failed, []
+        for t in retry:
+            _, zh = work(t)
+            if zh:
+                cache[t] = zh
+            else:
+                failed.append(t)
+            time.sleep(0.3)
+    failed = len(failed)
     if todo:
         print(f"  翻譯 {len(todo) - failed} 筆" + (f",{failed} 筆失敗(保留原文)" if failed else ""))
     TRANSLATION_CACHE.parent.mkdir(parents=True, exist_ok=True)
@@ -175,8 +309,8 @@ def collect_texts(report: dict) -> set[str]:
             texts.add(it["keyword"])
             if it["news"]:
                 texts.add(it["news"][0]["title"])
-    for key in ("rising", "accelerating"):
-        for r in report.get("github", {}).get(key, []):
+    for key in ("rising", "accelerating", "trending_page"):
+        for r in report.get("github", {}).get(key, [])[:300]:
             if r.get("description"):
                 texts.add(r["description"])
     return texts
@@ -206,12 +340,23 @@ def _matcher(words: list[str]) -> re.Pattern:
     return re.compile("|".join(alts))
 
 
-_MATCHERS = {cat: _matcher([w.strip() for w in words]) for cat, words in CATEGORIES.items()}
+_MATCHERS = {cat: _matcher(words) for cat, words in CATEGORIES.items()}
+_SPORTS_FALLBACK = _matcher(SPORTS_FALLBACK)
+_GH_MATCHERS = {cat: _matcher(words) for cat, words in GH_CATEGORIES.items()}
 
 
 def classify(text: str) -> list[str]:
     t = text.lower()
     hits = [cat for cat, rx in _MATCHERS.items() if rx.search(t)]
+    if not SPORTS.intersection(hits) and _SPORTS_FALLBACK.search(t):
+        hits.append("其他運動")
+    return hits or ["其他"]
+
+
+def classify_repo(r: dict) -> list[str]:
+    name = r["full_name"].split("/")[-1].replace("-", " ").replace("_", " ")
+    t = " ".join([name, r.get("description", ""), " ".join(r.get("topics", []))]).lower()
+    hits = [cat for cat, rx in _GH_MATCHERS.items() if rx.search(t)]
     return hits or ["其他"]
 
 
@@ -293,7 +438,7 @@ def slim(r: dict) -> dict:
         "stars": r["stargazers_count"],
         "forks": r["forks_count"],
         "created_at": r["created_at"],
-        "topics": r.get("topics", [])[:6],
+        "topics": r.get("topics", [])[:12],
     }
 
 
@@ -301,7 +446,7 @@ def rising_new_repos(days: int, top: int, now: datetime) -> list[dict]:
     """最近 N 天建立的專案,依每日平均星數排序。"""
     since = (now - timedelta(days=days)).strftime("%Y-%m-%d")
     out = []
-    for r in gh_search(f"created:>={since} stars:>=20", pages=2):
+    for r in gh_search(f"created:>={since} stars:>=20", pages=3):
         s = slim(r)
         created = datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
         age_days = max((now - created).total_seconds() / 86400, 0.5)
@@ -309,7 +454,7 @@ def rising_new_repos(days: int, top: int, now: datetime) -> list[dict]:
         s["stars_per_day"] = round(s["stars"] / age_days, 1)
         out.append(s)
     out.sort(key=lambda x: x["stars_per_day"], reverse=True)
-    return out[:top]
+    return out[:top] if top else out
 
 
 def accelerating_repos(top: int, now: datetime) -> tuple[list[dict], str | None]:
@@ -358,7 +503,7 @@ def accelerating_repos(top: int, now: datetime) -> tuple[list[dict], str | None]
         note = f"已建立第一份快照({len(seen)} 個專案),之後再執行一次即可計算成長率。"
     else:
         note = f"與 {prev_time.astimezone().strftime('%Y-%m-%d %H:%M')} 的快照比較"
-    return results[:top], note
+    return (results[:top] if top else results), note
 
 
 def try_github_trending(top: int) -> list[dict]:
@@ -378,10 +523,11 @@ def try_github_trending(top: int) -> list[dict]:
         gained = int(today.group(1).replace(",", ""))
         base = max(total - gained, 1)
         out.append({"full_name": m.group(1).strip(), "url": f"https://github.com/{m.group(1).strip()}",
+                    "description": "", "language": "", "topics": [],
                     "stars": total, "stars_today": gained,
                     "growth_pct_today": round(gained / base * 100, 2)})
     out.sort(key=lambda x: x["growth_pct_today"], reverse=True)
-    return out[:top]
+    return out[:top] if top else out
 
 
 # ---------------------------------------------------------------- 輸出
@@ -403,117 +549,21 @@ def cut(s: str, n: int) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
+TEMPLATE_FILE = HERE / "template.html"
+
+
 def render_html(report: dict) -> str:
-    e = html.escape
-    zh_map = report.get("translations", {})
-
-    def t(text: str, limit: int | None = None) -> str:
-        """原文與中文各一個 span,由「全部翻中文」按鈕切換顯示。"""
-        orig = cut(text, limit) if limit else text
-        zh = zh_map.get(text)
-        if not zh or zh == text:
-            return e(orig)
-        zh = cut(zh, limit) if limit else zh
-        return f"<span class='o'>{e(orig)}</span><span class='z' lang='zh-Hant'>{e(zh)}</span>"
-
-    parts = []
-    trends = report.get("trends", {})
-    if trends:
-        parts.append("<h2>各國熱門搜尋關鍵字</h2><div class='grid'>")
-        for geo, items in trends.items():
-            rows = "".join(
-                f"<tr><td>{i}</td><td><b>{t(it['keyword'])}</b>"
-                + (f"<div class='sub'><a href='{e(it['news'][0]['url'])}' target='_blank'>"
-                   f"{t(it['news'][0]['title'], 70)}</a></div>" if it["news"] else "")
-                + f"</td><td>{e(it['traffic'])}</td><td>{e('、'.join(it['categories']))}</td></tr>"
-                for i, it in enumerate(items, 1))
-            parts.append(f"<section><h3>{e(COUNTRIES.get(geo, geo))} ({geo})</h3>"
-                         f"<table><tr><th>#</th><th>關鍵字</th><th>搜尋量</th><th>主題</th></tr>{rows}</table></section>")
-        parts.append("</div>")
-    ages = report.get("age_groups", {})
-    if ages:
-        parts.append("<h2>依年齡層(推估)</h2><p class='note'>Google 未公開各年齡層搜尋資料,"
-                     "以下依關鍵字主題推估主要搜尋族群,僅供參考。</p><div class='grid'>")
-        for age, by_geo in ages.items():
-            cats = "、".join(AGE_GROUPS[age])
-            lis = "".join(
-                f"<li><b>{e(COUNTRIES.get(g, g))}</b>:" + "、".join(t(x['keyword']) for x in its[:6]) + "</li>"
-                for g, its in by_geo.items())
-            parts.append(f"<section><h3>{e(age)}</h3><div class='sub'>{e(cats)}</div><ul>{lis or '<li>無</li>'}</ul></section>")
-        parts.append("</div>")
-
-    def repo_table(title, note, repos, cols):
-        if not repos and not note:
-            return
-        parts.append(f"<h2>{e(title)}</h2>")
-        if note:
-            parts.append(f"<p class='note'>{e(note)}</p>")
-        if repos:
-            head = "".join(f"<th>{e(c[0])}</th>" for c in cols)
-            body = "".join(
-                "<tr><td>%d</td><td><a href='%s' target='_blank'>%s</a><div class='sub'>%s</div></td>%s</tr>" % (
-                    i, e(r["url"]), e(r["full_name"]), t(r.get("description", "")),
-                    "".join(f"<td>{e(str(r.get(k, '')))}</td>" for _, k in cols[2:]))
-                for i, r in enumerate(repos, 1))
-            parts.append(f"<table class='wide'><tr>{head}</tr>{body}</table>")
-
-    gh = report.get("github", {})
-    repo_table("GitHub 新星榜(依每日平均星數)", gh.get("rising_note"), gh.get("rising", []),
-               [("#", ""), ("專案", ""), ("語言", "language"), ("星數", "stars"),
-                ("天數", "age_days"), ("星/天", "stars_per_day")])
-    repo_table("GitHub 加速榜(依星數成長率)", gh.get("accel_note"), gh.get("accelerating", []),
-               [("#", ""), ("專案", ""), ("語言", "language"), ("星數", "stars"),
-                ("新增星", "stars_gained"), ("成長率 %/天", "growth_pct_per_day")])
-    repo_table("GitHub Trending 今日成長率", None, gh.get("trending_page", []),
-               [("#", ""), ("專案", ""), ("星數", "stars"), ("今日星", "stars_today"),
-                ("今日成長率 %", "growth_pct_today")])
-
-    n_tr = len(zh_map)
-    tr_note = f" · 已翻譯 {n_tr} 筆" if n_tr else " · 本次沒有翻譯資料"
-    btn_disabled = "" if n_tr else " disabled"
-    return f"""<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>TrendScout 報表</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap">
-<style>
-/* 版面:單一欄位的報表,卡片格線在手機上自動變成一欄 */
-:root{{--bg:#f6f7f9;--fg:#18202b;--mut:#5d6878;--card:#ffffff;--line:#dde2ea;--acc:#1d5fd1;--chip:#e8eefb;--btn-fg:#ffffff}}
-@media (prefers-color-scheme:dark){{:root:not([data-theme="light"]){{--bg:#12161d;--fg:#e8ecf2;--mut:#98a3b3;--card:#1b212b;--line:#2c3542;--acc:#7aa7ff;--chip:#22304a;--btn-fg:#0d1420;color-scheme:dark}}}}
-:root[data-theme="dark"]{{--bg:#12161d;--fg:#e8ecf2;--mut:#98a3b3;--card:#1b212b;--line:#2c3542;--acc:#7aa7ff;--chip:#22304a;--btn-fg:#0d1420;color-scheme:dark}}
-body{{background:var(--bg);color:var(--fg);font:15px/1.55 "Noto Sans TC",system-ui,sans-serif;margin:0 auto;padding-inline:16px;padding-block:20px 40px;max-width:1200px}}
-h1{{margin:0;font-size:1.6rem;text-wrap:balance}} h2{{margin:32px 0 12px;font-size:1.2rem;border-bottom:2px solid var(--line);padding-bottom:4px;text-wrap:balance}}
-h3{{margin:0 0 8px;font-size:1.05rem}}
-.grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:14px}}
-section{{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;min-width:0;overflow-x:auto}}
-table{{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}}
-td,th{{padding:6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}}
-th{{color:var(--mut);font-weight:500;font-size:12px;letter-spacing:.04em}}
-table.wide{{background:var(--card);border:1px solid var(--line);border-radius:8px;display:block;overflow-x:auto}}
-.sub,.note{{color:var(--mut);font-size:12.5px}} a{{color:var(--acc);text-decoration:none}} a:focus-visible{{outline:2px solid var(--acc)}}
-ul{{padding-left:1.1em;margin:6px 0}}
-.z{{display:none}} html.zh .z{{display:inline}} html.zh .o{{display:none}}
-.bar{{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;padding-block:10px;border-bottom:1px solid var(--line)}}
-#zh-btn{{font:inherit;font-weight:500;color:var(--btn-fg);background:var(--acc);border:0;border-radius:999px;padding:8px 18px;cursor:pointer;min-height:40px}}
-#zh-btn[aria-pressed="true"]{{background:var(--chip);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line)}}
-#zh-btn:focus-visible{{outline:2px solid var(--acc);outline-offset:2px}}
-</style></head><body>
-<div class="bar"><div><h1>TrendScout 報表</h1><div class="sub">產生時間:{e(report['generated_at'])}{tr_note}</div></div>
-<button id="zh-btn" type="button" aria-pressed="false"{btn_disabled}>全部翻中文</button></div>
-{''.join(parts)}
-<script>
-(function(){{
-  var root=document.documentElement, btn=document.getElementById('zh-btn');
-  function set(on){{
-    root.classList.toggle('zh',on);
-    btn.setAttribute('aria-pressed',on?'true':'false');
-    btn.textContent=on?'顯示原文':'全部翻中文';
-    try{{localStorage.setItem('trendscout-zh',on?'1':'0')}}catch(err){{}}
-  }}
-  var saved=null; try{{saved=localStorage.getItem('trendscout-zh')}}catch(err){{}}
-  if(saved==='1'&&!btn.disabled)set(true);
-  btn.addEventListener('click',function(){{set(!root.classList.contains('zh'))}});
-}})();
-</script>
-</body></html>"""
+    """把報表資料嵌進 template.html;網頁上的篩選、排名、翻譯切換都由頁面裡的 JS 處理。"""
+    payload = {
+        **report,
+        "countries": COUNTRIES,
+        "categories": list(CATEGORIES) + ["其他"],
+        "gh_categories": list(GH_CATEGORIES) + ["其他"],
+        "age_groups": AGE_GROUPS,
+    }
+    data = (json.dumps(payload, ensure_ascii=False)
+            .replace("</", "<\\/").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
+    return TEMPLATE_FILE.read_text(encoding="utf-8").replace("/*__REPORT__*/null", data)
 
 
 # ---------------------------------------------------------------- main
@@ -522,9 +572,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="各國熱門搜尋關鍵字 + GitHub 熱門專案成長率")
     ap.add_argument("--geo", nargs="+", default=DEFAULT_GEOS,
                     help=f"國家代碼(預設 {' '.join(DEFAULT_GEOS)});可用:{' '.join(COUNTRIES)}")
-    ap.add_argument("--per-geo", type=int, default=10, help="每國顯示幾個關鍵字")
+    ap.add_argument("--per-geo", type=int, default=10, help="終端機上每國顯示幾個關鍵字")
     ap.add_argument("--days", type=int, default=7, help="GitHub 新星榜:最近幾天建立的專案")
-    ap.add_argument("--top", type=int, default=20, help="GitHub 各榜顯示幾名")
+    ap.add_argument("--top", type=int, default=20, help="終端機上 GitHub 各榜顯示幾名(網頁可選到前 100)")
     ap.add_argument("--skip-trends", action="store_true")
     ap.add_argument("--skip-github", action="store_true")
     ap.add_argument("--no-translate", action="store_true", help="不產生中文翻譯")
@@ -538,18 +588,25 @@ def main() -> int:
         trends = {}
         for geo in [g.upper() for g in args.geo]:
             try:
-                items = fetch_trends(geo)[: args.per_geo]
+                items = fetch_trends(geo)
             except Exception as ex:
                 print(f"\n[{geo}] 取得失敗:{ex}", file=sys.stderr)
                 continue
             trends[geo] = items
+        if not args.no_translate:
+            print("  翻譯關鍵字與新聞標題…")
+            zh = translate_all(collect_texts({"trends": trends}))
+            for items in trends.values():
+                for it in items:
+                    texts = [it["keyword"]] + [n["title"] for n in it["news"]]
+                    it["categories"] = classify(" ".join(texts + [zh.get(t, "") for t in texts]))
+        for geo, items in trends.items():
             print(f"\n[{COUNTRIES.get(geo, geo)} {geo}]")
             print_table([[i, cut(it["keyword"], 28), it["traffic"], "、".join(it["categories"])]
-                         for i, it in enumerate(items, 1)], ["#", "關鍵字", "搜尋量", "主題"])
+                         for i, it in enumerate(items[: args.per_geo], 1)], ["#", "關鍵字", "搜尋量", "主題"])
         report["trends"] = trends
-        report["age_groups"] = group_by_age(trends)
         print("\n=== 依年齡層(依主題推估,非官方資料) ===")
-        for age, by_geo in report["age_groups"].items():
+        for age, by_geo in group_by_age(trends).items():
             print(f"\n[{age}]  ({'、'.join(AGE_GROUPS[age])})")
             for g, its in by_geo.items():
                 print(f"  {COUNTRIES.get(g, g)}: " + "、".join(cut(x['keyword'], 20) for x in its[:6]))
@@ -557,25 +614,28 @@ def main() -> int:
     if not args.skip_github:
         gh: dict = {}
         print(f"\n=== GitHub 新星榜:最近 {args.days} 天建立,依每日平均星數 ===")
-        gh["rising"] = rising_new_repos(args.days, args.top, now)
+        gh["rising"] = rising_new_repos(args.days, 0, now)
         gh["rising_note"] = f"最近 {args.days} 天建立的專案"
         print_table([[i, cut(r["full_name"], 40), r["language"], r["stars"], r["age_days"], r["stars_per_day"]]
-                     for i, r in enumerate(gh["rising"], 1)], ["#", "專案", "語言", "星數", "天數", "星/天"])
+                     for i, r in enumerate(gh["rising"][: args.top], 1)], ["#", "專案", "語言", "星數", "天數", "星/天"])
 
         print("\n=== GitHub 加速榜:星數成長率(與上次執行比較) ===")
-        gh["accelerating"], gh["accel_note"] = accelerating_repos(args.top, now)
+        gh["accelerating"], gh["accel_note"] = accelerating_repos(0, now)
         print(f"  {gh['accel_note']}")
         if gh["accelerating"]:
             print_table([[i, cut(r["full_name"], 40), r["stars"], r["stars_gained"], r["growth_pct_per_day"]]
-                         for i, r in enumerate(gh["accelerating"], 1)],
+                         for i, r in enumerate(gh["accelerating"][: args.top], 1)],
                         ["#", "專案", "星數", "新增星", "成長率%/天"])
 
-        gh["trending_page"] = try_github_trending(args.top)
+        gh["trending_page"] = try_github_trending(0)
         if gh["trending_page"]:
             print("\n=== GitHub Trending 今日成長率 ===")
             print_table([[i, cut(r["full_name"], 40), r["stars"], r["stars_today"], r["growth_pct_today"]]
-                         for i, r in enumerate(gh["trending_page"], 1)],
+                         for i, r in enumerate(gh["trending_page"][: args.top], 1)],
                         ["#", "專案", "星數", "今日星", "今日成長率%"])
+        for key in ("rising", "accelerating", "trending_page"):
+            for r in gh[key]:
+                r["categories"] = classify_repo(r)
         report["github"] = gh
 
     if not args.no_translate:

@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>TrendScout 熱搜報表</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* 版面:頂部固定工具列 + 三個區塊(熱搜、年齡層、GitHub),篩選鈕在手機上可橫向滑動 */
+:root{--bg:#f6f7f9;--fg:#18202b;--mut:#5d6878;--card:#ffffff;--line:#dde2ea;--acc:#1d5fd1;--chip:#e8eefb;--btn-fg:#ffffff;--hot:#c2410c}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12161d;--fg:#e8ecf2;--mut:#98a3b3;--card:#1b212b;--line:#2c3542;--acc:#7aa7ff;--chip:#22304a;--btn-fg:#0d1420;--hot:#fb923c;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#12161d;--fg:#e8ecf2;--mut:#98a3b3;--card:#1b212b;--line:#2c3542;--acc:#7aa7ff;--chip:#22304a;--btn-fg:#0d1420;--hot:#fb923c;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 "Noto Sans TC",system-ui,sans-serif;margin:0 auto;padding-inline:16px;padding-block:0 48px;max-width:1100px}
+h1{margin:0;font-size:1.3rem;text-wrap:balance}
+h2{margin:0;font-size:1.2rem;text-wrap:balance}
+a{color:var(--acc);text-decoration:none} a:hover{text-decoration:underline}
+button,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.sub{color:var(--mut);font-size:12.5px}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding-block:10px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between}
+.bar nav{display:flex;gap:14px;font-size:14px}
+#zh-btn{font-weight:500;color:var(--btn-fg);background:var(--acc);border:0;border-radius:999px;padding:8px 18px;cursor:pointer;min-height:40px}
+#zh-btn[aria-pressed="true"]{background:var(--chip);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line)}
+#zh-btn:disabled{opacity:.5;cursor:not-allowed}
+.z{display:none} html.zh .z{display:inline} html.zh .o{display:none}
+section.block{margin-top:28px;display:grid;grid-template-columns:minmax(0,1fr);gap:12px;scroll-margin-top:90px}
+section.block>*{min-width:0}
+.head{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;justify-content:space-between}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
+@media (min-width:760px){.chips{flex-wrap:wrap;overflow:visible}}
+.chip{flex:none;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 12px;cursor:pointer;font-size:13.5px;white-space:nowrap}
+.chip .n{color:var(--mut);font-size:12px;margin-left:4px;font-variant-numeric:tabular-nums}
+.chip[aria-pressed="true"]{background:var(--acc);border-color:var(--acc);color:var(--btn-fg)}
+.chip[aria-pressed="true"] .n{color:inherit;opacity:.8}
+.chip:disabled{opacity:.45;cursor:not-allowed}
+.chip.tag{font-size:12.5px;padding:3px 10px}
+.controls{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;font-size:13.5px}
+.controls label{display:flex;gap:6px;align-items:center;color:var(--mut)}
+select{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:5px 8px;color:var(--fg)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{flex:none;background:none;border:0;border-bottom:2px solid transparent;padding:6px 12px;cursor:pointer;color:var(--mut);font-weight:500}
+.tab[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--acc)}
+.tab:disabled{opacity:.45;cursor:not-allowed}
+ol.rank{list-style:none;margin:0;padding:0;background:var(--card);border:1px solid var(--line);border-radius:8px}
+ol.rank li{display:grid;grid-template-columns:2.2em minmax(0,1fr) auto;gap:4px 10px;padding:10px 12px;border-bottom:1px solid var(--line);align-items:start}
+ol.rank li:last-child{border-bottom:0}
+.no{color:var(--mut);font-variant-numeric:tabular-nums;font-weight:500;padding-top:1px}
+.kw{font-weight:700;overflow-wrap:anywhere}
+.meta{display:flex;flex-wrap:wrap;gap:4px 8px;margin-top:3px;font-size:12.5px;color:var(--mut);align-items:center}
+.pill{background:var(--chip);color:var(--fg);border-radius:4px;padding:0 6px;font-size:12px}
+.news{display:block;font-size:13px;margin-top:3px;overflow-wrap:anywhere}
+.desc{font-size:13.5px;margin-top:2px;overflow-wrap:anywhere}
+.metric{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.metric b{color:var(--hot)}
+.metric .sub{display:block}
+.empty{background:var(--card);border:1px dashed var(--line);border-radius:8px;padding:16px;color:var(--mut)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;min-width:0}
+.card h3{margin:0;font-size:1rem}
+.card ol{margin:8px 0 0;padding-left:1.4em;display:grid;gap:4px}
+.card li{overflow-wrap:anywhere}
+.note{color:var(--mut);font-size:13px;margin:0}
+@media (prefers-reduced-motion:no-preference){.chip,.tab{transition:background .15s,color .15s}}
+</style>
+</head>
+<body>
+<div class="bar">
+  <div>
+    <h1>TrendScout 熱搜報表</h1>
+    <div class="sub" id="stamp"></div>
+  </div>
+  <nav aria-label="區塊"><a href="#search">熱搜</a><a href="#age">年齡層</a><a href="#github">GitHub</a></nav>
+  <button id="zh-btn" type="button" aria-pressed="false">全部翻中文</button>
+</div>
+
+<section class="block" id="search">
+  <div class="head"><h2>熱門搜尋關鍵字</h2><span class="sub">Google Trends 每日搜尋趨勢 · 依搜尋量排序</span></div>
+  <div class="chips" id="topic-chips" role="group" aria-label="主題"></div>
+  <div class="controls">
+    <label for="geo-sel">國家 <select id="geo-sel"></select></label>
+    <label for="kw-n">顯示 <select id="kw-n"><option value="10">前 10 名</option><option value="20">前 20 名</option><option value="50">前 50 名</option><option value="100">前 100 名</option></select></label>
+    <span class="sub" id="kw-count"></span>
+  </div>
+  <div id="kw-list"></div>
+</section>
+
+<section class="block" id="age">
+  <div class="head"><h2>依年齡層</h2><span class="sub">推估值</span></div>
+  <p class="note">Google 沒有公開各年齡層的搜尋資料。這裡依關鍵字主題推估主要搜尋族群,僅供參考。</p>
+  <div class="grid" id="age-grid"></div>
+</section>
+
+<section class="block" id="github">
+  <div class="head"><h2>GitHub 熱門專案</h2><span class="sub" id="gh-note"></span></div>
+  <div class="tabs" id="gh-tabs" role="tablist" aria-label="排行榜"></div>
+  <div class="chips" id="gh-cats" role="group" aria-label="專案分類"></div>
+  <div>
+    <div class="sub" style="margin-bottom:4px">熱門標籤(點一下只看這個標籤)</div>
+    <div class="chips" id="gh-tags" role="group" aria-label="熱門標籤"></div>
+  </div>
+  <div class="controls">
+    <label for="gh-n">顯示 <select id="gh-n"><option value="10">前 10 名</option><option value="20">前 20 名</option><option value="50">前 50 名</option><option value="100">前 100 名</option></select></label>
+    <span class="sub" id="gh-count"></span>
+  </div>
+  <div id="gh-list"></div>
+</section>
+
+<script>
+const R = /*__REPORT__*/null;
+(function () {
+  const TR = R.translations || {};
+  const C = R.countries || {};
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+  const cut = (s, n) => (n && s.length > n ? s.slice(0, n - 1) + "…" : s);
+  const num = (n) => Number(n || 0).toLocaleString("zh-TW");
+  // 原文與中文各放一個 span,「全部翻中文」只切換 html 上的 class
+  function T(text, limit) {
+    const zh = TR[text];
+    if (!zh || zh === text) return esc(cut(text, limit));
+    return `<span class="o">${esc(cut(text, limit))}</span><span class="z" lang="zh-Hant">${esc(cut(zh, limit))}</span>`;
+  }
+  function chip(label, count, on, attrs, cls) {
+    return `<button type="button" class="chip${cls ? " " + cls : ""}" aria-pressed="${on}" ${attrs}${count === 0 ? " disabled" : ""}>${esc(label)}${count != null ? `<span class="n">${count}</span>` : ""}</button>`;
+  }
+
+  $("stamp").textContent = `產生時間:${R.generated_at}` + (Object.keys(TR).length ? ` · 已翻譯 ${Object.keys(TR).length} 筆` : "");
+
+  // ---------- 熱搜關鍵字
+  const items = [];
+  for (const [geo, list] of Object.entries(R.trends || {}))
+    list.forEach((it, i) => items.push({...it, geo, pos: i}));
+  items.sort((a, b) => b.traffic_n - a.traffic_n || a.pos - b.pos);
+  const S = {topic: "全部", geo: "全部", n: 10};
+
+  $("geo-sel").innerHTML = `<option value="全部">全部國家</option>` +
+    Object.keys(R.trends || {}).map((g) => `<option value="${g}">${esc(C[g] || g)}</option>`).join("");
+
+  function renderSearch() {
+    const inGeo = items.filter((it) => S.geo === "全部" || it.geo === S.geo);
+    const counts = {};
+    inGeo.forEach((it) => it.categories.forEach((c) => (counts[c] = (counts[c] || 0) + 1)));
+    $("topic-chips").innerHTML = chip("全部主題", inGeo.length, S.topic === "全部", `data-topic="全部"`) +
+      R.categories.filter((c) => counts[c]).map((c) => chip(c, counts[c], S.topic === c, `data-topic="${esc(c)}"`)).join("");
+    const rows = inGeo.filter((it) => S.topic === "全部" || it.categories.includes(S.topic));
+    const shown = rows.slice(0, S.n);
+    $("kw-count").textContent = `共 ${rows.length} 個關鍵字`;
+    if (!items.length) { $("kw-list").innerHTML = `<div class="empty">這次沒有抓到搜尋趨勢資料。</div>`; return; }
+    if (!shown.length) { $("kw-list").innerHTML = `<div class="empty">這個國家沒有「${esc(S.topic)}」的關鍵字,換個主題或國家看看。</div>`; return; }
+    $("kw-list").innerHTML = `<ol class="rank">` + shown.map((it, i) => {
+      const n = it.news && it.news[0];
+      return `<li><span class="no">${i + 1}</span><div><div class="kw">${T(it.keyword)}</div>
+        ${n ? `<a class="news" href="${esc(n.url)}" target="_blank" rel="noopener">${T(n.title, 80)}</a>` : ""}
+        <div class="meta"><span>${esc(C[it.geo] || it.geo)}</span>${it.categories.map((c) => `<span class="pill">${esc(c)}</span>`).join("")}</div></div>
+        <div class="metric"><b>${esc(it.traffic)}</b><span class="sub">搜尋量</span></div></li>`;
+    }).join("") + `</ol>`;
+  }
+  $("topic-chips").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-topic]"); if (!b) return;
+    S.topic = b.dataset.topic; renderSearch();
+  });
+  $("geo-sel").addEventListener("change", (e) => { S.geo = e.target.value; renderSearch(); });
+  $("kw-n").addEventListener("change", (e) => { S.n = +e.target.value; renderSearch(); });
+
+  // ---------- 年齡層
+  $("age-grid").innerHTML = Object.entries(R.age_groups || {}).map(([age, cats]) => {
+    const top = items.filter((it) => it.categories.some((c) => cats.includes(c))).slice(0, 8);
+    return `<div class="card"><h3>${esc(age)}</h3><div class="sub">${esc(cats.join("、"))}</div>` +
+      (top.length ? `<ol>${top.map((it) => `<li>${T(it.keyword)} <span class="sub">${esc(C[it.geo] || it.geo)}</span></li>`).join("")}</ol>`
+                  : `<p class="note" style="margin-top:8px">這次沒有相關關鍵字。</p>`) + `</div>`;
+  }).join("");
+
+  // ---------- GitHub
+  const gh = R.github || {};
+  const LISTS = [
+    {key: "rising", label: "新星榜", note: (gh.rising_note || "") + ",依每日平均星數排序",
+     metric: (r) => `<b>${num(r.stars_per_day)}</b><span class="sub">星/天</span>`,
+     sub: (r) => `${num(r.stars)} 星 · ${r.age_days} 天`},
+    {key: "accelerating", label: "加速榜", note: (gh.accel_note || "") + ",依星數成長率排序",
+     metric: (r) => `<b>${r.growth_pct_per_day}%</b><span class="sub">每天成長</span>`,
+     sub: (r) => `${num(r.stars)} 星 · +${num(r.stars_gained)}`},
+    {key: "trending_page", label: "今日 Trending", note: "github.com/trending,依今日星數成長率排序",
+     metric: (r) => `<b>${r.growth_pct_today}%</b><span class="sub">今日成長</span>`,
+     sub: (r) => `${num(r.stars)} 星 · 今日 +${num(r.stars_today)}`},
+  ];
+  const G = {list: (LISTS.find((l) => (gh[l.key] || []).length) || LISTS[0]).key, cat: "全部", tag: null, n: 10};
+
+  function renderGithub() {
+    const L = LISTS.find((l) => l.key === G.list);
+    const all = gh[G.list] || [];
+    $("gh-tabs").innerHTML = LISTS.map((l) => {
+      const n = (gh[l.key] || []).length;
+      return `<button type="button" role="tab" class="tab" data-list="${l.key}" aria-selected="${l.key === G.list}"${n ? "" : " disabled"}>${l.label} <span class="sub">${n}</span></button>`;
+    }).join("");
+    $("gh-note").textContent = all.length ? L.note : "";
+    const counts = {};
+    all.forEach((r) => (r.categories || ["其他"]).forEach((c) => (counts[c] = (counts[c] || 0) + 1)));
+    $("gh-cats").innerHTML = chip("全部分類", all.length, G.cat === "全部", `data-cat="全部"`) +
+      (R.gh_categories || []).filter((c) => counts[c]).map((c) => chip(c, counts[c], G.cat === c, `data-cat="${esc(c)}"`)).join("");
+    const inCat = all.filter((r) => G.cat === "全部" || (r.categories || []).includes(G.cat));
+    const tags = {};
+    inCat.forEach((r) => (r.topics || []).forEach((t) => (tags[t] = (tags[t] || 0) + 1)));
+    const topTags = Object.entries(tags).filter(([, n]) => n > 1).sort((a, b) => b[1] - a[1]).slice(0, 20);
+    if (G.tag && !tags[G.tag]) G.tag = null;
+    $("gh-tags").innerHTML = topTags.length
+      ? topTags.map(([t, n]) => chip(t, n, G.tag === t, `data-tag="${esc(t)}"`, "tag")).join("")
+      : `<span class="sub">這個分類沒有共同標籤</span>`;
+    const rows = inCat.filter((r) => !G.tag || (r.topics || []).includes(G.tag));
+    $("gh-count").textContent = all.length ? `共 ${rows.length} 個專案` : "";
+    if (!all.length) {
+      $("gh-list").innerHTML = `<div class="empty">這次沒有抓到 GitHub 資料。執行報表的主機連不到 GitHub 搜尋時就會這樣;在自己的電腦上執行就會出現。</div>`;
+      return;
+    }
+    $("gh-list").innerHTML = `<ol class="rank">` + rows.slice(0, G.n).map((r, i) => `<li><span class="no">${i + 1}</span><div>
+        <a class="kw" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.full_name)}</a>
+        ${r.description ? `<div class="desc">${T(r.description)}</div>` : ""}
+        <div class="meta">${r.language ? `<span>${esc(r.language)}</span>` : ""}<span>${L.sub(r)}</span>${(r.categories || []).map((c) => `<span class="pill">${esc(c)}</span>`).join("")}</div></div>
+        <div class="metric">${L.metric(r)}</div></li>`).join("") + `</ol>`;
+  }
+  $("gh-tabs").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-list]"); if (!b || b.disabled) return;
+    G.list = b.dataset.list; G.cat = "全部"; G.tag = null; renderGithub();
+  });
+  $("gh-cats").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-cat]"); if (!b) return;
+    G.cat = b.dataset.cat; G.tag = null; renderGithub();
+  });
+  $("gh-tags").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-tag]"); if (!b) return;
+    G.tag = G.tag === b.dataset.tag ? null : b.dataset.tag; renderGithub();
+  });
+  $("gh-n").addEventListener("change", (e) => { G.n = +e.target.value; renderGithub(); });
+
+  // ---------- 全部翻中文
+  const root = document.documentElement, btn = $("zh-btn");
+  function setZh(on) {
+    root.classList.toggle("zh", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    btn.textContent = on ? "顯示原文" : "全部翻中文";
+    try { localStorage.setItem("trendscout-zh", on ? "1" : "0"); } catch (err) {}
+  }
+  if (!Object.keys(TR).length) { btn.disabled = true; btn.title = "這次沒有翻譯資料"; }
+  let saved = null; try { saved = localStorage.getItem("trendscout-zh"); } catch (err) {}
+  if (saved === "1" && !btn.disabled) setZh(true);
+  btn.addEventListener("click", () => setZh(!root.classList.contains("zh")));
+
+  renderSearch();
+  renderGithub();
+})();
+</script>
+</body>
+</html>
