@@ -117,6 +117,71 @@ def http_get(url: str, headers: dict | None = None, timeout: int = 25) -> bytes:
     raise RuntimeError(f"GET {url} 失敗: {last_err}")
 
 
+# ---------------------------------------------------------------- 翻譯
+
+TRANSLATION_CACHE = OUT_DIR / "translations.json"
+_HAN = re.compile(r"[\u4e00-\u9fff]")
+_FOREIGN = re.compile(r"[A-Za-z\u00c0-\u024f\u3040-\u30ff\uac00-\ud7af\u0400-\u04ff\u0e00-\u0e7f\u0900-\u097f]")
+
+
+def needs_translation(text: str) -> bool:
+    """已經是中文(有漢字、沒有假名/韓文/拉丁字母等)就不用翻。"""
+    return bool(text.strip()) and bool(_FOREIGN.search(text) or not _HAN.search(text))
+
+
+def translate_one(text: str) -> str:
+    url = ("https://translate.googleapis.com/translate_a/single?"
+           + urllib.parse.urlencode({"client": "gtx", "sl": "auto", "tl": "zh-TW", "dt": "t", "q": text}))
+    data = json.loads(http_get(url, timeout=15))
+    return "".join(seg[0] for seg in data[0] if seg and seg[0]).strip()
+
+
+def translate_all(texts: set[str]) -> dict[str, str]:
+    """把文字翻成繁體中文;結果存在 out/translations.json,下次不用重翻。"""
+    from concurrent.futures import ThreadPoolExecutor
+
+    cache: dict[str, str] = {}
+    if TRANSLATION_CACHE.exists():
+        try:
+            cache = json.loads(TRANSLATION_CACHE.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            cache = {}
+    todo = [t for t in texts if needs_translation(t) and t not in cache]
+
+    def work(t: str) -> tuple[str, str | None]:
+        try:
+            return t, translate_one(t)
+        except Exception:
+            return t, None
+
+    failed = 0
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for t, zh in pool.map(work, todo):
+            if zh:
+                cache[t] = zh
+            else:
+                failed += 1
+    if todo:
+        print(f"  翻譯 {len(todo) - failed} 筆" + (f",{failed} 筆失敗(保留原文)" if failed else ""))
+    TRANSLATION_CACHE.parent.mkdir(parents=True, exist_ok=True)
+    TRANSLATION_CACHE.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
+    return {t: cache[t] for t in texts if t in cache}
+
+
+def collect_texts(report: dict) -> set[str]:
+    texts: set[str] = set()
+    for items in report.get("trends", {}).values():
+        for it in items:
+            texts.add(it["keyword"])
+            if it["news"]:
+                texts.add(it["news"][0]["title"])
+    for key in ("rising", "accelerating"):
+        for r in report.get("github", {}).get(key, []):
+            if r.get("description"):
+                texts.add(r["description"])
+    return texts
+
+
 # ---------------------------------------------------------------- 搜尋趨勢
 
 NS = {"ht": "https://trends.google.com/trending/rss"}
@@ -340,15 +405,26 @@ def cut(s: str, n: int) -> str:
 
 def render_html(report: dict) -> str:
     e = html.escape
+    zh_map = report.get("translations", {})
+
+    def t(text: str, limit: int | None = None) -> str:
+        """原文與中文各一個 span,由「全部翻中文」按鈕切換顯示。"""
+        orig = cut(text, limit) if limit else text
+        zh = zh_map.get(text)
+        if not zh or zh == text:
+            return e(orig)
+        zh = cut(zh, limit) if limit else zh
+        return f"<span class='o'>{e(orig)}</span><span class='z' lang='zh-Hant'>{e(zh)}</span>"
+
     parts = []
     trends = report.get("trends", {})
     if trends:
         parts.append("<h2>各國熱門搜尋關鍵字</h2><div class='grid'>")
         for geo, items in trends.items():
             rows = "".join(
-                f"<tr><td>{i}</td><td><b>{e(it['keyword'])}</b>"
+                f"<tr><td>{i}</td><td><b>{t(it['keyword'])}</b>"
                 + (f"<div class='sub'><a href='{e(it['news'][0]['url'])}' target='_blank'>"
-                   f"{e(cut(it['news'][0]['title'], 70))}</a></div>" if it["news"] else "")
+                   f"{t(it['news'][0]['title'], 70)}</a></div>" if it["news"] else "")
                 + f"</td><td>{e(it['traffic'])}</td><td>{e('、'.join(it['categories']))}</td></tr>"
                 for i, it in enumerate(items, 1))
             parts.append(f"<section><h3>{e(COUNTRIES.get(geo, geo))} ({geo})</h3>"
@@ -361,7 +437,7 @@ def render_html(report: dict) -> str:
         for age, by_geo in ages.items():
             cats = "、".join(AGE_GROUPS[age])
             lis = "".join(
-                f"<li><b>{e(COUNTRIES.get(g, g))}</b>:" + "、".join(e(x['keyword']) for x in its[:6]) + "</li>"
+                f"<li><b>{e(COUNTRIES.get(g, g))}</b>:" + "、".join(t(x['keyword']) for x in its[:6]) + "</li>"
                 for g, its in by_geo.items())
             parts.append(f"<section><h3>{e(age)}</h3><div class='sub'>{e(cats)}</div><ul>{lis or '<li>無</li>'}</ul></section>")
         parts.append("</div>")
@@ -376,7 +452,7 @@ def render_html(report: dict) -> str:
             head = "".join(f"<th>{e(c[0])}</th>" for c in cols)
             body = "".join(
                 "<tr><td>%d</td><td><a href='%s' target='_blank'>%s</a><div class='sub'>%s</div></td>%s</tr>" % (
-                    i, e(r["url"]), e(r["full_name"]), e(r.get("description", "")),
+                    i, e(r["url"]), e(r["full_name"]), t(r.get("description", "")),
                     "".join(f"<td>{e(str(r.get(k, '')))}</td>" for _, k in cols[2:]))
                 for i, r in enumerate(repos, 1))
             parts.append(f"<table class='wide'><tr>{head}</tr>{body}</table>")
@@ -392,14 +468,17 @@ def render_html(report: dict) -> str:
                [("#", ""), ("專案", ""), ("星數", "stars"), ("今日星", "stars_today"),
                 ("今日成長率 %", "growth_pct_today")])
 
+    n_tr = len(zh_map)
+    tr_note = f" · 已翻譯 {n_tr} 筆" if n_tr else " · 本次沒有翻譯資料"
+    btn_disabled = "" if n_tr else " disabled"
     return f"""<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>TrendScout 報表</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap">
 <style>
 /* 版面:單一欄位的報表,卡片格線在手機上自動變成一欄 */
-:root{{--bg:#f6f7f9;--fg:#18202b;--mut:#5d6878;--card:#ffffff;--line:#dde2ea;--acc:#1d5fd1;--chip:#e8eefb}}
-@media (prefers-color-scheme:dark){{:root:not([data-theme="light"]){{--bg:#12161d;--fg:#e8ecf2;--mut:#98a3b3;--card:#1b212b;--line:#2c3542;--acc:#7aa7ff;--chip:#22304a;color-scheme:dark}}}}
-:root[data-theme="dark"]{{--bg:#12161d;--fg:#e8ecf2;--mut:#98a3b3;--card:#1b212b;--line:#2c3542;--acc:#7aa7ff;--chip:#22304a;color-scheme:dark}}
+:root{{--bg:#f6f7f9;--fg:#18202b;--mut:#5d6878;--card:#ffffff;--line:#dde2ea;--acc:#1d5fd1;--chip:#e8eefb;--btn-fg:#ffffff}}
+@media (prefers-color-scheme:dark){{:root:not([data-theme="light"]){{--bg:#12161d;--fg:#e8ecf2;--mut:#98a3b3;--card:#1b212b;--line:#2c3542;--acc:#7aa7ff;--chip:#22304a;--btn-fg:#0d1420;color-scheme:dark}}}}
+:root[data-theme="dark"]{{--bg:#12161d;--fg:#e8ecf2;--mut:#98a3b3;--card:#1b212b;--line:#2c3542;--acc:#7aa7ff;--chip:#22304a;--btn-fg:#0d1420;color-scheme:dark}}
 body{{background:var(--bg);color:var(--fg);font:15px/1.55 "Noto Sans TC",system-ui,sans-serif;margin:0 auto;padding-inline:16px;padding-block:20px 40px;max-width:1200px}}
 h1{{margin:0;font-size:1.6rem;text-wrap:balance}} h2{{margin:32px 0 12px;font-size:1.2rem;border-bottom:2px solid var(--line);padding-bottom:4px;text-wrap:balance}}
 h3{{margin:0 0 8px;font-size:1.05rem}}
@@ -411,9 +490,29 @@ th{{color:var(--mut);font-weight:500;font-size:12px;letter-spacing:.04em}}
 table.wide{{background:var(--card);border:1px solid var(--line);border-radius:8px;display:block;overflow-x:auto}}
 .sub,.note{{color:var(--mut);font-size:12.5px}} a{{color:var(--acc);text-decoration:none}} a:focus-visible{{outline:2px solid var(--acc)}}
 ul{{padding-left:1.1em;margin:6px 0}}
+.z{{display:none}} html.zh .z{{display:inline}} html.zh .o{{display:none}}
+.bar{{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;padding-block:10px;border-bottom:1px solid var(--line)}}
+#zh-btn{{font:inherit;font-weight:500;color:var(--btn-fg);background:var(--acc);border:0;border-radius:999px;padding:8px 18px;cursor:pointer;min-height:40px}}
+#zh-btn[aria-pressed="true"]{{background:var(--chip);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line)}}
+#zh-btn:focus-visible{{outline:2px solid var(--acc);outline-offset:2px}}
 </style></head><body>
-<h1>TrendScout 報表</h1><div class="sub">產生時間:{e(report['generated_at'])}</div>
+<div class="bar"><div><h1>TrendScout 報表</h1><div class="sub">產生時間:{e(report['generated_at'])}{tr_note}</div></div>
+<button id="zh-btn" type="button" aria-pressed="false"{btn_disabled}>全部翻中文</button></div>
 {''.join(parts)}
+<script>
+(function(){{
+  var root=document.documentElement, btn=document.getElementById('zh-btn');
+  function set(on){{
+    root.classList.toggle('zh',on);
+    btn.setAttribute('aria-pressed',on?'true':'false');
+    btn.textContent=on?'顯示原文':'全部翻中文';
+    try{{localStorage.setItem('trendscout-zh',on?'1':'0')}}catch(err){{}}
+  }}
+  var saved=null; try{{saved=localStorage.getItem('trendscout-zh')}}catch(err){{}}
+  if(saved==='1'&&!btn.disabled)set(true);
+  btn.addEventListener('click',function(){{set(!root.classList.contains('zh'))}});
+}})();
+</script>
 </body></html>"""
 
 
@@ -428,6 +527,7 @@ def main() -> int:
     ap.add_argument("--top", type=int, default=20, help="GitHub 各榜顯示幾名")
     ap.add_argument("--skip-trends", action="store_true")
     ap.add_argument("--skip-github", action="store_true")
+    ap.add_argument("--no-translate", action="store_true", help="不產生中文翻譯")
     args = ap.parse_args()
 
     now = datetime.now(timezone.utc)
@@ -477,6 +577,10 @@ def main() -> int:
                          for i, r in enumerate(gh["trending_page"], 1)],
                         ["#", "專案", "星數", "今日星", "今日成長率%"])
         report["github"] = gh
+
+    if not args.no_translate:
+        print("\n=== 翻譯成中文 ===")
+        report["translations"] = translate_all(collect_texts(report))
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = now.astimezone().strftime("%Y%m%d-%H%M")

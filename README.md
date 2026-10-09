@@ -7,10 +7,13 @@ python trendscout.py                        # 預設 8 國 + GitHub
 python trendscout.py --geo TW JP KR US      # 指定國家
 python trendscout.py --days 14 --top 30     # GitHub 新星榜取最近 14 天、前 30 名
 python trendscout.py --skip-github          # 只看搜尋趨勢
+python trendscout.py --no-translate         # 不產生中文翻譯
 export GITHUB_TOKEN=ghp_xxx                 # 選用:提高 GitHub API 速率上限
 ```
 
 輸出:終端表格 + `out/report-*.html`(可用瀏覽器開)+ `out/report-*.json`。
+
+網頁報表右上角有「全部翻中文」按鈕:關鍵字、新聞標題和 GitHub 專案說明會切換成繁體中文,再按一次回到原文。翻譯在產生報表時透過 Google 翻譯完成,存在 `out/translations.json`,翻過的不會重翻。
 
 | 區塊 | 資料來源 | 說明 |
 |---|---|---|
