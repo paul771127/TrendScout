@@ -61,6 +61,28 @@ ol.rank li:last-child{border-bottom:0}
 .card ol{margin:8px 0 0;padding-left:1.4em;display:grid;gap:4px}
 .card li{overflow-wrap:anywhere}
 .note{color:var(--mut);font-size:13px;margin:0}
+.summary{margin:0;padding-left:1.2em;display:grid;gap:6px;max-width:72ch}
+.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));gap:12px}
+.bars{display:grid;gap:2px;margin-top:8px}
+.bar-row{display:grid;grid-template-columns:6.5em minmax(0,1fr) 5.2em;gap:8px;align-items:center;background:none;border:0;padding:4px 2px;text-align:left;cursor:pointer;border-radius:4px;color:var(--fg)}
+.bar-row:hover{background:var(--chip)}
+.bar-row .lab{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.track{height:10px;background:var(--line);border-radius:0 4px 4px 0;opacity:.9}
+.fill{height:10px;background:var(--acc);border-radius:0 4px 4px 0;min-width:2px}
+.bar-row .val{font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--mut);text-align:right;white-space:nowrap}
+.bar-row .val b{color:var(--fg);font-weight:500}
+.md{max-width:76ch;line-height:1.7}
+.md h4{font-size:1.05rem;margin:18px 0 6px} .md h5{font-size:.98rem;margin:14px 0 4px}
+.md ul,.md ol{padding-left:1.3em;margin:6px 0} .md li{margin:3px 0} .md p{margin:8px 0}
+.md code{background:var(--chip);border-radius:3px;padding:0 4px;font-size:.92em}
+.md hr{border:0;border-top:1px solid var(--line);margin:16px 0}
+.md .tbl{overflow-x:auto} .md table{border-collapse:collapse;font-size:13.5px} .md td,.md th{border-bottom:1px solid var(--line);padding:4px 8px;text-align:left}
+.search{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.search input{flex:1 1 220px;min-width:0;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:8px 10px;font:inherit;color:var(--fg)}
+.btn{background:var(--card);border:1px solid var(--acc);color:var(--acc);border-radius:6px;padding:7px 12px;cursor:pointer;font-weight:500;white-space:nowrap}
+.btn:disabled{opacity:.5;cursor:wait}
+.live{display:grid;gap:8px;border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--bg)}
+.live-head{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;justify-content:space-between}
 @media (prefers-reduced-motion:no-preference){.chip,.tab{transition:background .15s,color .15s}}
 </style>
 </head>
@@ -70,9 +92,21 @@ ol.rank li:last-child{border-bottom:0}
     <h1>TrendScout 熱搜報表</h1>
     <div class="sub" id="stamp"></div>
   </div>
-  <nav aria-label="區塊"><a href="#search">熱搜</a><a href="#age">年齡層</a><a href="#github">GitHub</a></nav>
+  <nav aria-label="區塊"><a href="#analysis">分析</a><a href="#search">熱搜</a><a href="#age">年齡層</a><a href="#github">GitHub</a></nav>
   <button id="zh-btn" type="button" aria-pressed="false">全部翻中文</button>
 </div>
+
+<section class="block" id="analysis">
+  <div class="head"><h2>今日分析</h2><span class="sub" id="an-dl"></span></div>
+  <ul class="summary" id="an-summary"></ul>
+  <div class="grid2">
+    <div class="card"><h3>主題分布</h3><div class="sub">關鍵字數 · 出現國家數 · 和前一天比(點主題看關鍵字)</div><div class="bars" id="an-topics"></div></div>
+    <div class="card"><h3>跨國同時熱門</h3><div class="sub">同一話題在兩個以上國家上榜</div><div id="an-cross"></div></div>
+    <div class="card" id="an-new-card" hidden><h3>新上榜</h3><div class="sub" id="an-new-sub"></div><div id="an-new"></div></div>
+    <div class="card" id="an-gh-card" hidden><h3>GitHub 新星榜分類</h3><div class="sub">前 100 名的專案數(點分類看專案)</div><div class="bars" id="an-gh"></div><p class="note" id="an-gh-more" style="margin-top:8px"></p></div>
+  </div>
+  <div class="card"><h3>AI 深入分析</h3><div class="sub" id="an-ai-status"></div><div class="md" id="an-ai"></div></div>
+</section>
 
 <section class="block" id="search">
   <div class="head"><h2>熱門搜尋關鍵字</h2><span class="sub">Google Trends 每日搜尋趨勢 · 依搜尋量排序</span></div>
@@ -93,6 +127,13 @@ ol.rank li:last-child{border-bottom:0}
 
 <section class="block" id="github">
   <div class="head"><h2>GitHub 熱門專案</h2><span class="sub" id="gh-note"></span></div>
+  <form class="search" id="gh-form" role="search">
+    <label for="gh-q" class="sub" style="flex-basis:100%">輸入關鍵字篩選,例如 agent、rust、遊戲、資安(多個字用空白隔開)</label>
+    <input id="gh-q" type="search" placeholder="搜尋專案名稱、說明、標籤…" autocomplete="off">
+    <select id="gh-range" aria-label="GitHub 搜尋範圍"><option value="new7">最近 7 天新專案</option><option value="new30">最近 30 天新專案</option><option value="active">近 30 天活躍專案</option></select>
+    <button class="btn" id="gh-live-btn" type="submit">到 GitHub 搜尋全部</button>
+  </form>
+  <div class="live" id="gh-live" hidden></div>
   <div class="tabs" id="gh-tabs" role="tablist" aria-label="排行榜"></div>
   <div class="chips" id="gh-cats" role="group" aria-label="專案分類"></div>
   <div>
@@ -206,18 +247,69 @@ const R = /*__REPORT__*/null;
     $("gh-tags").innerHTML = topTags.length
       ? topTags.map(([t, n]) => chip(t, n, G.tag === t, `data-tag="${esc(t)}"`, "tag")).join("")
       : `<span class="sub">這個分類沒有共同標籤</span>`;
-    const rows = inCat.filter((r) => !G.tag || (r.topics || []).includes(G.tag));
-    $("gh-count").textContent = all.length ? `共 ${rows.length} 個專案` : "";
+    const terms = $("gh-q").value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const hay = (r) => [r.full_name, r.description, TR[r.description], r.language, (r.topics || []).join(" "),
+                        (r.categories || []).join(" ")].join(" ").toLowerCase();
+    const rows = inCat.filter((r) => (!G.tag || (r.topics || []).includes(G.tag)) && terms.every((t) => hay(r).includes(t)));
+    $("gh-count").textContent = all.length ? `共 ${rows.length} 個專案` + (terms.length ? `符合「${terms.join(" ")}」` : "") : "";
     if (!all.length) {
       $("gh-list").innerHTML = `<div class="empty">這次沒有抓到 GitHub 資料。執行報表的主機連不到 GitHub 搜尋時就會這樣;在自己的電腦上執行就會出現。</div>`;
       return;
     }
-    $("gh-list").innerHTML = `<ol class="rank">` + rows.slice(0, G.n).map((r, i) => `<li><span class="no">${i + 1}</span><div>
+    if (!rows.length) {
+      $("gh-list").innerHTML = `<div class="empty">目前榜單裡沒有符合的專案。可以按「到 GitHub 搜尋全部」查更多。</div>`;
+      return;
+    }
+    $("gh-list").innerHTML = `<ol class="rank">` + rows.slice(0, G.n).map((r, i) => repoRow(r, i, L.metric(r), L.sub(r))).join("") + `</ol>`;
+  }
+  function repoRow(r, i, metric, sub) {
+    return `<li><span class="no">${i + 1}</span><div>
         <a class="kw" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.full_name)}</a>
         ${r.description ? `<div class="desc">${T(r.description)}</div>` : ""}
-        <div class="meta">${r.language ? `<span>${esc(r.language)}</span>` : ""}<span>${L.sub(r)}</span>${(r.categories || []).map((c) => `<span class="pill">${esc(c)}</span>`).join("")}</div></div>
-        <div class="metric">${L.metric(r)}</div></li>`).join("") + `</ol>`;
+        <div class="meta">${r.language ? `<span>${esc(r.language)}</span>` : ""}<span>${sub}</span>${(r.categories || []).map((c) => `<span class="pill">${esc(c)}</span>`).join("")}</div></div>
+        <div class="metric">${metric}</div></li>`;
   }
+
+  // 到 GitHub 搜尋全部:頁面直接呼叫 GitHub 搜尋 API(未登入每分鐘約 10 次)
+  async function liveSearch() {
+    const q = $("gh-q").value.trim(), box = $("gh-live"), btn = $("gh-live-btn");
+    box.hidden = false;
+    if (!q) { box.innerHTML = `<div class="sub">先輸入關鍵字再搜尋。</div>`; return; }
+    const range = $("gh-range").value;
+    const since = new Date(Date.now() - (range === "new7" ? 7 : 30) * 864e5).toISOString().slice(0, 10);
+    const qual = range === "active" ? `pushed:>=${since} stars:>=50` : `created:>=${since}`;
+    box.innerHTML = `<div class="sub">正在搜尋 GitHub…</div>`; btn.disabled = true;
+    let html;
+    try {
+      const res = await fetch("https://api.github.com/search/repositories?" + new URLSearchParams(
+        {q: `${q} ${qual}`, sort: "stars", order: "desc", per_page: "100"}), {headers: {Accept: "application/vnd.github+json"}});
+      if (res.status === 403 || res.status === 429) throw new Error("rate");
+      if (!res.ok) throw new Error("http " + res.status);
+      const data = await res.json();
+      const repos = (data.items || []).map((x) => {
+        const age = Math.max((Date.now() - Date.parse(x.created_at)) / 864e5, 0.5);
+        return {full_name: x.full_name, url: x.html_url, description: x.description || "", language: x.language || "",
+                topics: x.topics || [], stars: x.stargazers_count, age, spd: x.stargazers_count / age};
+      });
+      if (range !== "active") repos.sort((a, b) => b.spd - a.spd);
+      const shown = repos.slice(0, G.n);
+      html = `<div class="live-head"><strong>GitHub 搜尋「${esc(q)}」</strong><span class="sub">共 ${num(data.total_count)} 個 · ${range === "active" ? "依星數排序" : "依每日平均星數排序"} · 顯示前 ${shown.length} 名</span></div>` +
+        (shown.length ? `<ol class="rank">` + shown.map((r, i) => repoRow(r, i,
+            range === "active" ? `<b>${num(r.stars)}</b><span class="sub">星</span>` : `<b>${num(Math.round(r.spd))}</b><span class="sub">星/天</span>`,
+            range === "active" ? (r.topics.slice(0, 3).join(" · ") || "") : `${num(r.stars)} 星 · ${r.age.toFixed(1)} 天`)).join("") + `</ol>`
+          : `<div class="empty">GitHub 上沒有符合的專案,換個關鍵字或改用較長的時間範圍。</div>`) +
+        `<div class="sub">GitHub 搜尋結果的說明沒有翻譯。</div>`;
+    } catch (err) {
+      html = err.message === "rate"
+        ? `<div class="empty">GitHub 限制了查詢次數(未登入每分鐘約 10 次),請等一分鐘再試。</div>`
+        : `<div class="empty">這個頁面連不到 GitHub。請改用 GitHub Pages 版網頁(paul771127.github.io/TrendScout)使用這個功能。</div>`;
+    }
+    box.innerHTML = html + `<div><button type="button" class="btn" id="gh-live-close">關閉搜尋結果</button></div>`;
+    btn.disabled = false;
+  }
+  $("gh-form").addEventListener("submit", (e) => { e.preventDefault(); liveSearch(); });
+  $("gh-q").addEventListener("input", () => renderGithub());
+  $("gh-live").addEventListener("click", (e) => { if (e.target.id === "gh-live-close") $("gh-live").hidden = true; });
   $("gh-tabs").addEventListener("click", (e) => {
     const b = e.target.closest("[data-list]"); if (!b || b.disabled) return;
     G.list = b.dataset.list; G.cat = "全部"; G.tag = null; renderGithub();
@@ -245,8 +337,87 @@ const R = /*__REPORT__*/null;
   if (saved === "1" && !btn.disabled) setZh(true);
   btn.addEventListener("click", () => setZh(!root.classList.contains("zh")));
 
+  // ---------- 今日分析
+  function md(text) {
+    const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/`([^`]+)`/g, "<code>$1</code>");
+    const out = []; let list = null, table = null, para = [];
+    const flush = () => {
+      if (para.length) { out.push(`<p>${para.map(inline).join("<br>")}</p>`); para = []; }
+      if (list) { out.push(`</${list}>`); list = null; }
+      if (table) { out.push(`<div class="tbl"><table>${table.join("")}</table></div>`); table = null; }
+    };
+    for (const raw of String(text).split("\n")) {
+      const line = raw.trimEnd(); let m;
+      if (/^\s*\|.*\|\s*$/.test(line)) {
+        if (/^\s*\|[\s:|-]+\|\s*$/.test(line)) continue;
+        if (!table) { flush(); table = []; }
+        const cells = line.trim().slice(1, -1).split("|").map((c) => inline(c.trim()));
+        table.push(`<tr>${cells.map((c) => (table.length ? `<td>${c}</td>` : `<th>${c}</th>`)).join("")}</tr>`);
+        continue;
+      }
+      if (table) flush();
+      if (!line.trim()) { flush(); continue; }
+      if ((m = line.match(/^(#{1,6})\s+(.*)$/))) { flush(); out.push(m[1].length <= 2 ? `<h4>${inline(m[2])}</h4>` : `<h5>${inline(m[2])}</h5>`); continue; }
+      if (/^\s*(-{3,}|\*{3,})\s*$/.test(line)) { flush(); out.push("<hr>"); continue; }
+      if ((m = line.match(/^\s*[-*•]\s+(.*)$/)) || (m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
+        const kind = /^\s*\d/.test(line) ? "ol" : "ul";
+        if (para.length) { out.push(`<p>${para.map(inline).join("<br>")}</p>`); para = []; }
+        if (list !== kind) { if (list) out.push(`</${list}>`); out.push(`<${kind}>`); list = kind; }
+        out.push(`<li>${inline(m[1])}</li>`); continue;
+      }
+      if (list) { out.push(`</${list}>`); list = null; }
+      para.push(line);
+    }
+    flush();
+    return out.join("");
+  }
+  function bars(el, rows, onPick) {
+    const max = Math.max(1, ...rows.map((r) => r.n));
+    el.innerHTML = rows.map((r) => `<button type="button" class="bar-row" data-key="${esc(r.key)}" title="${esc(r.tip)}">
+        <span class="lab">${esc(r.key)}</span><span class="track"><span class="fill" style="display:block;width:${(100 * r.n / max).toFixed(1)}%"></span></span>
+        <span class="val"><b>${r.n}</b>${r.extra ? " · " + r.extra : ""}</span></button>`).join("");
+    el.onclick = (e) => { const b = e.target.closest("[data-key]"); if (b) onPick(b.dataset.key); };
+  }
+  function renderAnalysis() {
+    const A = R.analysis;
+    if (!A) { $("analysis").hidden = true; return; }
+    const st = A.stats, s = st.search, ch = st.change, g = st.github;
+    $("an-summary").innerHTML = A.summary.map((l) => `<li>${esc(l)}</li>`).join("");
+    if (/\.github\.io$/.test(location.hostname))
+      $("an-dl").innerHTML = `<a href="analysis.md" download="trendscout-analysis.md">下載報告(Markdown)</a> · <a href="report.json" download>原始資料</a>`;
+    const delta = (c) => {
+      if (!ch) return "";
+      const prevUp = (ch.rising_topics || []).find((x) => x[0] === c), prevDown = (ch.falling_topics || []).find((x) => x[0] === c);
+      return prevUp ? `▲${prevUp[1]}` : prevDown ? `▼${-prevDown[1]}` : "";
+    };
+    const topics = Object.entries(s.topic_counts).filter(([c]) => c !== "其他").slice(0, 12);
+    bars($("an-topics"), topics.map(([c, n]) => ({key: c, n, extra: `${s.topic_spread[c] || 0} 國` + (delta(c) ? " " + delta(c) : ""),
+      tip: `${c}:${n} 個關鍵字,出現在 ${s.topic_spread[c] || 0} 個國家` + (delta(c) ? `,和前一天比 ${delta(c)}` : "")})),
+      (c) => { S.topic = c; S.geo = "全部"; $("geo-sel").value = "全部"; renderSearch(); location.hash = "search"; });
+    $("an-cross").innerHTML = s.cross_country.length
+      ? `<ol>${s.cross_country.slice(0, 10).map((c) => `<li>${T(c.keyword)} <span class="sub">${esc(c.countries.join("、"))}</span></li>`).join("")}</ol>`
+      : `<p class="note" style="margin-top:8px">今天沒有跨國同時上榜的關鍵字。</p>`;
+    if (ch) {
+      $("an-new-card").hidden = false;
+      $("an-new-sub").textContent = `和 ${ch.compared_with} 相比,新上榜 ${ch.new_count} 個`;
+      $("an-new").innerHTML = `<ol>${ch.new_top.map((k) => `<li>${T(k.keyword)} <span class="sub">${esc(k.country)} · ${esc(k.traffic)}</span></li>`).join("")}</ol>`;
+    }
+    if (g.category_counts) {
+      $("an-gh-card").hidden = false;
+      bars($("an-gh"), Object.entries(g.category_counts).filter(([c]) => c !== "其他").slice(0, 10).map(([c, n]) => ({key: c, n,
+        extra: `${num(g.category_avg_stars_per_day[c])} 星/天`, tip: `${c}:${n} 個專案,平均每天 ${num(g.category_avg_stars_per_day[c])} 星`})),
+        (c) => { G.list = "rising"; G.cat = c; G.tag = null; renderGithub(); location.hash = "github"; });
+      $("an-gh-more").textContent = (g.languages ? "主要語言:" + Object.keys(g.languages).slice(0, 5).join("、") : "") +
+        (g.tags ? " · 熱門標籤:" + Object.keys(g.tags).slice(0, 8).join("、") : "");
+    }
+    $("an-ai-status").textContent = A.ai ? A.ai_status : "";
+    $("an-ai").innerHTML = A.ai ? md(A.ai)
+      : `<p class="note" style="margin-top:8px">${esc(A.ai_status)}<br>設定 Claude API 金鑰後,這裡會出現 AI 根據當天數據寫的分析:今日重點、跨國觀察、主題深入、GitHub 技術趨勢、值得追蹤的話題。</p>`;
+  }
+
   renderSearch();
   renderGithub();
+  renderAnalysis();
 })();
 </script>
 </body>

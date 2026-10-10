@@ -38,3 +38,18 @@ https://paul771127.github.io/TrendScout/ 。手機、電腦打開都是最新版
 
 第一次使用要開啟 Pages:repo 的 **Settings → Pages → Build and deployment → Source** 選 **GitHub Actions**。
 之後可以到 **Actions → 每日報表 → Run workflow** 手動跑一次,不用等到隔天。
+
+## 分析報告
+
+每次執行都會產生「今日分析」(網頁最上方)和 `out/analysis-*.md` 報告檔:
+
+- **統計分析(不需設定):** 主題分布與擴散國家數、跨國同時熱門、和前一天比的新上榜與主題升降(歷史紀錄存在 `out/history.json`)、GitHub 分類/語言/標籤趨勢,並自動寫成文字摘要。
+- **AI 深入分析(選用):** 安裝 `pip install anthropic` 並設定 `ANTHROPIC_API_KEY` 後,會用 Claude(`claude-opus-5-5`)根據當天數據寫出今日重點、跨國觀察、主題深入、GitHub 技術趨勢與值得追蹤的話題。送出的資料約 2 萬字,估計每次 0.2~0.4 美元(依當天資料量和 AI 思考長度而定),每天跑一次一個月約 6~12 美元;不想用可加 `--no-ai`。
+  GitHub Actions 版:到 repo 的 **Settings → Secrets and variables → Actions → New repository secret**,名稱填 `ANTHROPIC_API_KEY`。
+
+## GitHub 關鍵字搜尋
+
+網頁 GitHub 區的搜尋框可以:
+
+- **即時篩選**目前榜單(比對名稱、說明、中文翻譯、標籤、分類)
+- **「到 GitHub 搜尋全部」**:直接查 GitHub 上符合關鍵字的熱門專案(最近 7 天 / 30 天新專案,或近 30 天活躍專案)。這個功能要在 GitHub Pages 版網頁使用;未登入每分鐘約可查 10 次。

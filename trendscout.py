@@ -18,6 +18,7 @@
   python trendscout.py --days 14 --top 30    # GitHub 新星榜取最近 14 天
   python trendscout.py --skip-github         # 只看搜尋趨勢
   python trendscout.py --skip-trends         # 只看 GitHub
+  python trendscout.py --no-ai               # 不做 AI 深入分析
 輸出:終端表格 + out/report-YYYYMMDD-HHMM.html + 同名 .json
 """
 from __future__ import annotations
@@ -35,6 +36,8 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+import analysis
 
 HERE = Path(__file__).resolve().parent
 OUT_DIR = HERE / "out"
@@ -578,6 +581,7 @@ def main() -> int:
     ap.add_argument("--skip-trends", action="store_true")
     ap.add_argument("--skip-github", action="store_true")
     ap.add_argument("--no-translate", action="store_true", help="不產生中文翻譯")
+    ap.add_argument("--no-ai", action="store_true", help="不呼叫 Claude API 做 AI 深入分析")
     args = ap.parse_args()
 
     now = datetime.now(timezone.utc)
@@ -642,8 +646,15 @@ def main() -> int:
         print("\n=== 翻譯成中文 ===")
         report["translations"] = translate_all(collect_texts(report))
 
+    print("\n=== 分析報告 ===")
+    report["analysis"], analysis_md = analysis.run(report, COUNTRIES, OUT_DIR, not args.no_ai, now)
+    for line in report["analysis"]["summary"]:
+        print(f"  {line}")
+    print(f"  AI 分析:{report['analysis']['ai_status']}")
+
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = now.astimezone().strftime("%Y%m%d-%H%M")
+    (OUT_DIR / f"analysis-{stamp}.md").write_text(analysis_md, encoding="utf-8")
     (OUT_DIR / f"report-{stamp}.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     html_path = OUT_DIR / f"report-{stamp}.html"
     html_path.write_text(render_html(report), encoding="utf-8")

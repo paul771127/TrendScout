@@ -18,28 +18,35 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # 保留 GitHub 星數快照與翻譯快取,加速榜才能和前一天比較
+      # 保留 GitHub 星數快照、翻譯快取與每日歷史紀錄,才能和前一天比較
       - uses: actions/cache@v4
         with:
           path: |
             out/github_snapshots.json
             out/translations.json
+            out/history.json
           key: trendscout-data-${{ github.run_id }}
           restore-keys: trendscout-data-
+      # 有設定 ANTHROPIC_API_KEY secret 時才安裝 SDK、做 AI 深入分析
+      - name: 安裝 Claude SDK
+        if: ${{ env.ANTHROPIC_API_KEY != '' }}
+        run: pip install anthropic
       - name: 產生報表
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python trendscout.py --per-geo 3
       - name: 準備網頁
         run: |
           mkdir -p _site
           cp "$(ls -t out/report-*.html | head -1)" _site/index.html
           cp "$(ls -t out/report-*.json | head -1)" _site/report.json
+          cp "$(ls -t out/analysis-*.md | head -1)" _site/analysis.md
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
